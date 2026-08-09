@@ -1,0 +1,3 @@
+group: containers
+status: stable
+summary: Fargate service with roles, logging, ALB attachment, and CPU/memory/request autoscaling

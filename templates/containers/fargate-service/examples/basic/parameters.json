@@ -1,0 +1,17 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-app" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "ServiceSuffix", "ParameterValue": "api" },
+  { "ParameterKey": "ClusterName", "ParameterValue": "example-app-dev" },
+  { "ParameterKey": "VpcId", "ParameterValue": "vpc-0123456789abcdef0" },
+  { "ParameterKey": "SubnetIds", "ParameterValue": "subnet-0123456789abcdef0,subnet-0fedcba9876543210" },
+  { "ParameterKey": "ImageUri", "ParameterValue": "123456789012.dkr.ecr.us-east-1.amazonaws.com/example-app/api:abc1234" },
+  { "ParameterKey": "ContainerPort", "ParameterValue": "8080" },
+  { "ParameterKey": "Cpu", "ParameterValue": "512" },
+  { "ParameterKey": "Memory", "ParameterValue": "1024" },
+  { "ParameterKey": "DesiredCount", "ParameterValue": "2" },
+  { "ParameterKey": "MinCapacity", "ParameterValue": "2" },
+  { "ParameterKey": "MaxCapacity", "ParameterValue": "10" },
+  { "ParameterKey": "TargetCpuUtilization", "ParameterValue": "65" },
+  { "ParameterKey": "HealthCheckPath", "ParameterValue": "/healthz" }
+]

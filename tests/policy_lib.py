@@ -140,6 +140,30 @@ def as_list(value: Any) -> list:
     return value if isinstance(value, list) else [value]
 
 
+def entries(value: Any) -> list:
+    """Flatten a property that may be a list, an Fn::If, or a list of Fn::Ifs.
+
+    A rule that only handles the plain-list case silently passes on every
+    conditional block in the library — which is most of them, since Conditions
+    are how this library expresses optionality. Both Fn::If branches are
+    returned: a rule must hold on the branch that is taken *and* the one that is
+    not, because a parameter change is all it takes to swap them.
+    """
+    out: list = []
+    for item in as_list(value):
+        if isinstance(item, dict) and set(item) == {"Fn::If"} and len(item["Fn::If"]) == 3:
+            _, true_branch, false_branch = item["Fn::If"]
+            out.extend(entries(true_branch))
+            out.extend(entries(false_branch))
+        elif isinstance(item, dict) and item.get("Ref") == "AWS::NoValue":
+            continue
+        elif isinstance(item, list):
+            out.extend(entries(item))
+        else:
+            out.append(item)
+    return out
+
+
 def statements(policy: Any) -> list[dict]:
     """Every IAM statement inside a policy document, however it is nested."""
     if not isinstance(policy, dict):

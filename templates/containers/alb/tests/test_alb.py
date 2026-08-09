@@ -138,6 +138,17 @@ def test_alias_record_outputs_are_present(template) -> None:
     }
 
 
+def test_full_name_is_exposed_for_request_based_autoscaling(template) -> None:
+    """Application Auto Scaling's ALBRequestCountPerTarget metric needs it.
+
+    The resource label is `<lb-full-name>/<target-group-full-name>`, and there
+    is no way to derive the first half from the ARN a service already has.
+    """
+    assert template.outputs["LoadBalancerFullName"]["Value"] == {
+        "Fn::GetAtt": ["LoadBalancer", "LoadBalancerFullName"]
+    }
+
+
 def test_subnets_are_typed_so_the_console_validates_them(template) -> None:
     assert template.param("SubnetIds")["Type"] == "List<AWS::EC2::Subnet::Id>", (
         "A typed parameter is validated before the deploy starts; a plain "

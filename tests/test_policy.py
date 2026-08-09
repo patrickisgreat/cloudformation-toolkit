@@ -25,6 +25,7 @@ from policy_lib import (
     Exemption,
     Finding,
     as_list,
+    entries,
     iam_documents,
     literals,
     load_exemptions,
@@ -362,7 +363,7 @@ def sg_no_open_ingress(t: Template) -> list[Finding]:
             )
 
     for rid in t.of_type("AWS::EC2::SecurityGroup"):
-        for entry in as_list(_get(t, rid, "SecurityGroupIngress", [])):
+        for entry in entries(_get(t, rid, "SecurityGroupIngress", [])):
             if isinstance(entry, dict):
                 check(rid, entry)
     for rid in t.of_type("AWS::EC2::SecurityGroupIngress"):
@@ -380,7 +381,7 @@ def sg_rule_description(t: Template) -> list[Finding]:
     findings = []
     for rid in t.of_type("AWS::EC2::SecurityGroup"):
         for key in ("SecurityGroupIngress", "SecurityGroupEgress"):
-            for index, entry in enumerate(as_list(_get(t, rid, key, []))):
+            for index, entry in enumerate(entries(_get(t, rid, key, []))):
                 if isinstance(entry, dict) and not entry.get("Description"):
                     findings.append(Finding(rid, f"{key}[{index}] has no Description"))
     for type_name in ("AWS::EC2::SecurityGroupIngress", "AWS::EC2::SecurityGroupEgress"):

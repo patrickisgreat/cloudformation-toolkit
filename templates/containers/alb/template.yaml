@@ -292,6 +292,13 @@ Outputs:
       directly - it changes if the load balancer is replaced.
     Value: !GetAtt LoadBalancer.DNSName
 
+  LoadBalancerFullName:
+    Description: >-
+      Full name (app/<name>/<id>). Application Auto Scaling needs this, combined
+      with a target group's full name, to build the ALBRequestCountPerTarget
+      resource label — request-based scaling cannot be configured without it.
+    Value: !GetAtt LoadBalancer.LoadBalancerFullName
+
   LoadBalancerHostedZoneId:
     Description: Canonical hosted zone ID, required by a Route 53 alias record.
     Value: !GetAtt LoadBalancer.CanonicalHostedZoneID
