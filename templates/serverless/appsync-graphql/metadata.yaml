@@ -1,0 +1,3 @@
+group: serverless
+status: beta
+summary: AppSync GraphQL API with S3 schema, direct-Lambda resolvers, Cognito auth, X-Ray

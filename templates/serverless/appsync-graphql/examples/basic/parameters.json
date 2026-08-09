@@ -1,0 +1,12 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-app" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "ApiSuffix", "ParameterValue": "graphql" },
+  { "ParameterKey": "SchemaS3Location", "ParameterValue": "s3://example-app-dev-artifacts-123456789012-us-east-1/graphql/schema-abc1234.graphql" },
+  { "ParameterKey": "AuthenticationType", "ParameterValue": "AMAZON_COGNITO_USER_POOLS" },
+  { "ParameterKey": "UserPoolId", "ParameterValue": "us-east-1_aBcDeFgHi" },
+  { "ParameterKey": "LambdaFunctionArn", "ParameterValue": "arn:aws:lambda:us-east-1:123456789012:function:example-app-dev-graphql" },
+  { "ParameterKey": "QueryFieldName", "ParameterValue": "getOrder" },
+  { "ParameterKey": "MutationFieldName", "ParameterValue": "createOrder" },
+  { "ParameterKey": "FieldLogLevel", "ParameterValue": "ERROR" }
+]

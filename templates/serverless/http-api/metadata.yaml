@@ -1,0 +1,3 @@
+group: serverless
+status: stable
+summary: API Gateway HTTP API with throttling, access logs, JWT auth and a custom domain
