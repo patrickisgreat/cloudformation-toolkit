@@ -1,0 +1,3 @@
+group: ml
+status: stable
+summary: SageMaker real-time or serverless endpoint with autoscaling and rollback alarms

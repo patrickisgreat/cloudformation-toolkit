@@ -1,0 +1,3 @@
+group: database
+status: stable
+summary: Aurora Serverless v2 Postgres/MySQL, private, encrypted, generated credentials

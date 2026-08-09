@@ -1,0 +1,13 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-app" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "DatabaseName", "ParameterValue": "appdb" },
+  { "ParameterKey": "Engine", "ParameterValue": "aurora-postgresql" },
+  { "ParameterKey": "EngineVersion", "ParameterValue": "16.4" },
+  { "ParameterKey": "VpcId", "ParameterValue": "vpc-0123456789abcdef0" },
+  { "ParameterKey": "SubnetIds", "ParameterValue": "subnet-0123456789abcdef0,subnet-0fedcba9876543210" },
+  { "ParameterKey": "ClientSecurityGroupId", "ParameterValue": "sg-0123456789abcdef0" },
+  { "ParameterKey": "MinCapacityAcu", "ParameterValue": "0.5" },
+  { "ParameterKey": "MaxCapacityAcu", "ParameterValue": "4" },
+  { "ParameterKey": "ReaderCount", "ParameterValue": "0" }
+]

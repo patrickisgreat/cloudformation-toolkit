@@ -1,0 +1,10 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-app" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "TableSuffix", "ParameterValue": "orders" },
+  { "ParameterKey": "PartitionKeyName", "ParameterValue": "pk" },
+  { "ParameterKey": "SortKeyName", "ParameterValue": "sk" },
+  { "ParameterKey": "BillingMode", "ParameterValue": "PAY_PER_REQUEST" },
+  { "ParameterKey": "PointInTimeRecovery", "ParameterValue": "true" },
+  { "ParameterKey": "TtlAttributeName", "ParameterValue": "expiresAt" }
+]

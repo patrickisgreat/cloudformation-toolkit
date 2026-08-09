@@ -1,0 +1,3 @@
+group: database
+status: stable
+summary: DynamoDB table with PITR, encryption, optional GSI, TTL and change streams

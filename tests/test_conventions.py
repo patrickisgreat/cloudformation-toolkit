@@ -258,9 +258,13 @@ def test_example_values_satisfy_allowed_values(template_dir: Path) -> None:
     path = template_dir / "examples" / "basic" / "parameters.json"
     for entry in json.loads(path.read_text(encoding="utf-8")):
         name, value = entry["ParameterKey"], entry["ParameterValue"]
+        # CloudFormation parameter files carry every value as a string and the
+        # service coerces it, while AllowedValues on a Number parameter is
+        # written as numbers. Compare on the string form so a valid file is not
+        # reported as invalid.
         allowed = t.allowed_values(name)
         if allowed:
-            assert value in allowed, (
+            assert str(value) in [str(a) for a in allowed], (
                 f"{_rel(path)}: {name}={value!r} is not in AllowedValues {allowed}"
             )
         pattern = t.param(name).get("AllowedPattern")

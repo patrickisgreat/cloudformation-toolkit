@@ -1,0 +1,10 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-ml" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "EndpointSuffix", "ParameterValue": "embeddings" },
+  { "ParameterKey": "InferenceImageUri", "ParameterValue": "763104351884.dkr.ecr.us-east-1.amazonaws.com/huggingface-pytorch-inference:2.1.0-transformers4.37.0-cpu-py310-ubuntu22.04" },
+  { "ParameterKey": "HuggingFaceModelId", "ParameterValue": "sentence-transformers/all-MiniLM-L6-v2" },
+  { "ParameterKey": "ServingMode", "ParameterValue": "SERVERLESS" },
+  { "ParameterKey": "ServerlessMemoryMb", "ParameterValue": "2048" },
+  { "ParameterKey": "ServerlessMaxConcurrency", "ParameterValue": "5" }
+]
