@@ -1,0 +1,17 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-ml" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "ServiceSuffix", "ParameterValue": "llm" },
+  { "ParameterKey": "ClusterName", "ParameterValue": "example-ml-dev" },
+  { "ParameterKey": "VpcId", "ParameterValue": "vpc-0123456789abcdef0" },
+  { "ParameterKey": "SubnetIds", "ParameterValue": "subnet-0123456789abcdef0,subnet-0fedcba9876543210" },
+  { "ParameterKey": "AlbSecurityGroupId", "ParameterValue": "sg-0123456789abcdef0" },
+  { "ParameterKey": "ListenerArn", "ParameterValue": "arn:aws:elasticloadbalancing:us-east-1:123456789012:listener/app/example-ml-dev/50dc6c495c0c9188/f2f7dc8efc522ab2" },
+  { "ParameterKey": "InstanceType", "ParameterValue": "g5.xlarge" },
+  { "ParameterKey": "MinInstanceCount", "ParameterValue": "0" },
+  { "ParameterKey": "MaxInstanceCount", "ParameterValue": "1" },
+  { "ParameterKey": "ModelId", "ParameterValue": "mistralai/Mistral-7B-Instruct-v0.3" },
+  { "ParameterKey": "MaxModelLength", "ParameterValue": "8192" },
+  { "ParameterKey": "TaskCpu", "ParameterValue": "3584" },
+  { "ParameterKey": "TaskMemoryMb", "ParameterValue": "14336" }
+]

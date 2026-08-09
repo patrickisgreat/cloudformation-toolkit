@@ -1,0 +1,3 @@
+group: ml
+status: beta
+summary: Self-hosted vLLM/TGI on a GPU ECS fleet with scale-to-zero and an OpenAI API
