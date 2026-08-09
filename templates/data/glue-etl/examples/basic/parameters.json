@@ -1,0 +1,10 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-app" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "DatabaseSuffix", "ParameterValue": "raw" },
+  { "ParameterKey": "SourceBucketArn", "ParameterValue": "arn:aws:s3:::example-app-dev-lake-123456789012-us-east-1" },
+  { "ParameterKey": "SourcePrefix", "ParameterValue": "raw/clickstream" },
+  { "ParameterKey": "EnableCrawler", "ParameterValue": "true" },
+  { "ParameterKey": "CrawlerSchedule", "ParameterValue": "cron(0 1 * * ? *)" },
+  { "ParameterKey": "EnableJob", "ParameterValue": "false" }
+]

@@ -1,0 +1,7 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-app" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "StreamSuffix", "ParameterValue": "clickstream" },
+  { "ParameterKey": "CapacityMode", "ParameterValue": "ON_DEMAND" },
+  { "ParameterKey": "RetentionHours", "ParameterValue": "24" }
+]

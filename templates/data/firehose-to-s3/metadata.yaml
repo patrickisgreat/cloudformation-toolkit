@@ -1,0 +1,3 @@
+group: data
+status: stable
+summary: Firehose delivery to S3 with Hive partitioning, compression and an error prefix

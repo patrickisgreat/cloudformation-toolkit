@@ -1,0 +1,11 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-app" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "StreamSuffix", "ParameterValue": "clickstream" },
+  { "ParameterKey": "SourceStreamArn", "ParameterValue": "arn:aws:kinesis:us-east-1:123456789012:stream/example-app-dev-clickstream" },
+  { "ParameterKey": "DestinationBucketArn", "ParameterValue": "arn:aws:s3:::example-app-dev-lake-123456789012-us-east-1" },
+  { "ParameterKey": "TablePrefix", "ParameterValue": "raw/clickstream" },
+  { "ParameterKey": "CompressionFormat", "ParameterValue": "GZIP" },
+  { "ParameterKey": "BufferSizeMb", "ParameterValue": "64" },
+  { "ParameterKey": "BufferIntervalSeconds", "ParameterValue": "300" }
+]

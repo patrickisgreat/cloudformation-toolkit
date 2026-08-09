@@ -1,0 +1,8 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-app" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "WorkgroupSuffix", "ParameterValue": "analytics" },
+  { "ParameterKey": "ResultsBucketArn", "ParameterValue": "arn:aws:s3:::example-app-dev-lake-123456789012-us-east-1" },
+  { "ParameterKey": "ResultsPrefix", "ParameterValue": "athena-results" },
+  { "ParameterKey": "BytesScannedCutoffPerQuery", "ParameterValue": "10737418240" }
+]
