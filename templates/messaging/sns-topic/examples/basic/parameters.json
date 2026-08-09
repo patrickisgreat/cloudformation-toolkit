@@ -1,0 +1,6 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-app" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "TopicSuffix", "ParameterValue": "alarms" },
+  { "ParameterKey": "EmailEndpoint", "ParameterValue": "oncall@example.com" }
+]

@@ -1,0 +1,3 @@
+group: messaging
+status: stable
+summary: SNS topic with encryption, optional FIFO, filtered SQS fan-out, scoped publish policy

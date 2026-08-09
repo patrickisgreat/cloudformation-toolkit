@@ -1,0 +1,13 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-app" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "FunctionSuffix", "ParameterValue": "webhook" },
+  { "ParameterKey": "PackageType", "ParameterValue": "Zip" },
+  { "ParameterKey": "CodeS3Bucket", "ParameterValue": "example-app-dev-artifacts-123456789012-us-east-1" },
+  { "ParameterKey": "CodeS3Key", "ParameterValue": "webhook/abc1234.zip" },
+  { "ParameterKey": "Runtime", "ParameterValue": "python3.12" },
+  { "ParameterKey": "Handler", "ParameterValue": "app.handler" },
+  { "ParameterKey": "Architecture", "ParameterValue": "arm64" },
+  { "ParameterKey": "MemorySize", "ParameterValue": "512" },
+  { "ParameterKey": "TimeoutSeconds", "ParameterValue": "30" }
+]

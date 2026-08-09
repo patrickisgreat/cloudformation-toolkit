@@ -1,0 +1,3 @@
+group: messaging
+status: stable
+summary: SQS queue with encryption, long polling, and a dead-letter queue with redrive

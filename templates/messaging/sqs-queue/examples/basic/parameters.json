@@ -1,0 +1,7 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-app" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "QueueSuffix", "ParameterValue": "orders" },
+  { "ParameterKey": "VisibilityTimeoutSeconds", "ParameterValue": "60" },
+  { "ParameterKey": "MaxReceiveCount", "ParameterValue": "5" }
+]

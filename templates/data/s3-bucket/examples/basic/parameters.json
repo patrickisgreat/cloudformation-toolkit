@@ -1,0 +1,9 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-app" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "BucketSuffix", "ParameterValue": "uploads" },
+  { "ParameterKey": "Versioning", "ParameterValue": "Enabled" },
+  { "ParameterKey": "ExpireNoncurrentVersionsAfterDays", "ParameterValue": "30" },
+  { "ParameterKey": "AbortIncompleteUploadsAfterDays", "ParameterValue": "7" },
+  { "ParameterKey": "EnableEventBridge", "ParameterValue": "true" }
+]

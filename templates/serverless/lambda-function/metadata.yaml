@@ -1,0 +1,3 @@
+group: serverless
+status: stable
+summary: Lambda function from zip or image, with role, bounded logs, VPC and concurrency controls

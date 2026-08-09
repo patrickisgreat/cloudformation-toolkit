@@ -1,0 +1,3 @@
+group: data
+status: stable
+summary: S3 bucket with encryption, blocked public access, TLS-only policy, lifecycle rules
