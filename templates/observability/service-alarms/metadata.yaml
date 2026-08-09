@@ -1,0 +1,3 @@
+group: observability
+status: stable
+summary: Alarm set for a container service - 5xx, target health, p99 latency, CPU, DLQ

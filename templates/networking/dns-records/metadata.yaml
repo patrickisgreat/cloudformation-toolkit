@@ -1,0 +1,3 @@
+group: networking
+status: stable
+summary: Route 53 alias or plain record with an optional health check

@@ -1,0 +1,9 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-app" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "HostedZoneId", "ParameterValue": "Z0123456789ABCDEFGHIJ" },
+  { "ParameterKey": "RecordName", "ParameterValue": "api.example.com" },
+  { "ParameterKey": "RecordType", "ParameterValue": "A" },
+  { "ParameterKey": "AliasTargetDnsName", "ParameterValue": "example-app-dev-1234567890.us-east-1.elb.amazonaws.com" },
+  { "ParameterKey": "AliasTargetHostedZoneId", "ParameterValue": "Z35SXDOTRQ7X7K" }
+]

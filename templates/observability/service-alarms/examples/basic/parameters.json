@@ -1,0 +1,10 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-app" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "ServiceSuffix", "ParameterValue": "api" },
+  { "ParameterKey": "AlarmTopicArn", "ParameterValue": "arn:aws:sns:us-east-1:123456789012:example-app-dev-alarms" },
+  { "ParameterKey": "LoadBalancerFullName", "ParameterValue": "app/example-app-dev/50dc6c495c0c9188" },
+  { "ParameterKey": "TargetGroupFullName", "ParameterValue": "targetgroup/example-app-api/73e2d6bc24d8a067" },
+  { "ParameterKey": "EcsClusterName", "ParameterValue": "example-app-dev" },
+  { "ParameterKey": "EcsServiceName", "ParameterValue": "example-app-api" }
+]

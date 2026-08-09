@@ -1,0 +1,3 @@
+group: networking
+status: stable
+summary: DNS-validated ACM certificate with optional wildcard and extra SAN

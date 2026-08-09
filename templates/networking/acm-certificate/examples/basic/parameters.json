@@ -1,0 +1,7 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-app" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "DomainName", "ParameterValue": "api.example.com" },
+  { "ParameterKey": "HostedZoneId", "ParameterValue": "Z0123456789ABCDEFGHIJ" },
+  { "ParameterKey": "IncludeWildcard", "ParameterValue": "false" }
+]
