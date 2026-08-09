@@ -1,0 +1,3 @@
+group: foundation
+status: stable
+summary: Customer-managed KMS key with rotation, alias, and a composed key policy

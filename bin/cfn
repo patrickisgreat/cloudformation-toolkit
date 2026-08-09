@@ -1,0 +1,549 @@
+#!/usr/bin/env bash
+#
+# cfn — the one entrypoint for this toolkit.
+#
+# Offline commands (no AWS account, no credentials): lint, test, docs, catalog,
+# params, new, check. These are what CI runs and what you run on a laptop.
+#
+# Online commands (need credentials): package, deploy, diff, delete, outputs,
+# events, drift. These read `environments/<env>/env.json` for region, artifact
+# bucket, stack naming, tags, and capabilities — so the same target deploys to
+# dev, staging, and prod without editing a template.
+#
+# Run `./bin/cfn help` for usage.
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT"
+
+# Prefer the repo-local virtualenv, so `make install` is the only setup step.
+if [[ -x "$REPO_ROOT/.venv/bin/python" ]]; then
+  PY="$REPO_ROOT/.venv/bin/python"
+  PYTEST="$REPO_ROOT/.venv/bin/pytest"
+  CFN_LINT="$REPO_ROOT/.venv/bin/cfn-lint"
+else
+  PY="$(command -v python3 || true)"
+  PYTEST="$(command -v pytest || true)"
+  CFN_LINT="$(command -v cfn-lint || true)"
+fi
+
+DEFAULT_ENV="${CFN_ENV:-dev}"
+
+# --- output helpers ---------------------------------------------------------
+
+if [[ -t 1 ]]; then
+  BOLD=$'\033[1m'; DIM=$'\033[2m'; RED=$'\033[31m'; GREEN=$'\033[32m'
+  YELLOW=$'\033[33m'; CYAN=$'\033[36m'; RESET=$'\033[0m'
+else
+  BOLD=""; DIM=""; RED=""; GREEN=""; YELLOW=""; CYAN=""; RESET=""
+fi
+
+info()  { printf '%s==>%s %s\n' "$CYAN" "$RESET" "$*"; }
+ok()    { printf '%s ok %s %s\n' "$GREEN" "$RESET" "$*"; }
+warn()  { printf '%swarn%s %s\n' "$YELLOW" "$RESET" "$*" >&2; }
+die()   { printf '%sfail%s %s\n' "$RED" "$RESET" "$*" >&2; exit 1; }
+
+need() {
+  command -v "$1" >/dev/null 2>&1 || die "$1 is not installed. $2"
+}
+
+need_aws() {
+  need aws "Install the AWS CLI v2: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html"
+}
+
+need_python_tools() {
+  [[ -n "$PY" ]] || die "python3 not found."
+  [[ -x "$CFN_LINT" || -n "$CFN_LINT" ]] || die "cfn-lint not found. Run: make install"
+}
+
+# --- target resolution ------------------------------------------------------
+
+# A target is one of:
+#   containers/fargate-service      -> templates/containers/fargate-service/template.yaml
+#   container-service               -> stacks/container-service/template.yaml
+#   path/to/anything.yaml           -> used verbatim
+#
+# Stacks are checked first: a stack and a template never share a name, and when
+# someone types a bare word they almost always mean the deployable archetype.
+resolve_template() {
+  local target="$1"
+
+  if [[ -f "$target" ]]; then printf '%s\n' "$target"; return; fi
+  if [[ -f "stacks/$target/template.yaml" ]]; then printf 'stacks/%s/template.yaml\n' "$target"; return; fi
+  if [[ -f "templates/$target/template.yaml" ]]; then printf 'templates/%s/template.yaml\n' "$target"; return; fi
+  if [[ -f "$target/template.yaml" ]]; then printf '%s/template.yaml\n' "$target"; return; fi
+
+  die "no template for target '$target'. Try: ./bin/cfn list"
+}
+
+# The last path segment that is not 'template.yaml' — the human name of a thing.
+target_slug() {
+  local tmpl="$1"
+  basename "$(dirname "$tmpl")"
+}
+
+# --- environment config -----------------------------------------------------
+
+env_file() {
+  local env="$1"
+  local f="environments/$env/env.json"
+  [[ -f "$f" ]] || die "no environment config at $f. Copy environments/dev and edit it."
+  printf '%s\n' "$f"
+}
+
+# Read a dotted key out of the environment config, with an optional default.
+env_get() {
+  local env="$1" key="$2" default="${3:-}"
+  "$PY" - "$(env_file "$env")" "$key" "$default" <<'PY'
+import json, sys
+path, key, default = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(path) as fh:
+    data = json.load(fh)
+node = data
+for part in key.split("."):
+    if not isinstance(node, dict) or part not in node:
+        print(default)
+        raise SystemExit(0)
+    node = node[part]
+print("" if node is None else node)
+PY
+}
+
+# Tags as `Key=Value ...`, from the environment config plus the standard
+# provenance tags every stack this toolkit deploys should carry.
+env_tags() {
+  local env="$1" slug="$2"
+  "$PY" - "$(env_file "$env")" "$env" "$slug" <<'PY'
+import json, shlex, sys
+path, env, slug = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(path) as fh:
+    data = json.load(fh)
+tags = {"Environment": env, "ManagedBy": "cloudformation-toolkit", "Component": slug}
+tags.update(data.get("tags") or {})
+print(" ".join(f"{k}={shlex.quote(str(v))}" for k, v in tags.items()))
+PY
+}
+
+env_capabilities() {
+  local env="$1"
+  "$PY" - "$(env_file "$env")" <<'PY'
+import json, sys
+with open(sys.argv[1]) as fh:
+    data = json.load(fh)
+caps = data.get("capabilities") or ["CAPABILITY_IAM", "CAPABILITY_NAMED_IAM", "CAPABILITY_AUTO_EXPAND"]
+print(" ".join(caps))
+PY
+}
+
+# `aws` flags shared by every online command: region and (optional) profile.
+aws_flags() {
+  local env="$1" region profile
+  region="$(env_get "$env" region)"
+  profile="$(env_get "$env" profile)"
+  [[ -n "$region" ]] && printf -- '--region %s ' "$region"
+  [[ -n "$profile" ]] && printf -- '--profile %s ' "$profile"
+}
+
+param_file() {
+  local env="$1" slug="$2"
+  local f="environments/$env/params/$slug.json"
+  [[ -f "$f" ]] && printf '%s\n' "$f"
+}
+
+stack_name() {
+  local env="$1" slug="$2" prefix
+  prefix="$(env_get "$env" stack_prefix "$env")"
+  printf '%s-%s\n' "$prefix" "$slug"
+}
+
+# Does this template use nested stacks? Those need `aws cloudformation package`
+# to upload child templates to S3 before deploy; flat templates do not.
+needs_packaging() {
+  grep -qE 'AWS::CloudFormation::Stack|AWS::Serverless::' "$1"
+}
+
+package_template() {
+  local env="$1" tmpl="$2" out="$3" bucket prefix
+  bucket="$(env_get "$env" artifacts_bucket)"
+  [[ -n "$bucket" ]] || die "$tmpl uses nested stacks, so it must be packaged, but \
+\"artifacts_bucket\" is unset in environments/$env/env.json."
+  prefix="$(env_get "$env" artifacts_prefix cloudformation-toolkit)"
+
+  info "packaging $tmpl -> s3://$bucket/$prefix"
+  # shellcheck disable=SC2046
+  aws $(aws_flags "$env") cloudformation package \
+    --template-file "$tmpl" \
+    --s3-bucket "$bucket" \
+    --s3-prefix "$prefix" \
+    --output-template-file "$out" >/dev/null
+  printf '%s\n' "$out"
+}
+
+# --- commands ---------------------------------------------------------------
+
+cmd_help() {
+  cat <<EOF
+${BOLD}cfn${RESET} — CloudFormation toolkit
+
+${BOLD}Offline${RESET} (no AWS credentials needed)
+  ${CYAN}list${RESET}                       List every template and stack in the library
+  ${CYAN}lint${RESET} [path...]             cfn-lint every template against the resource schemas
+  ${CYAN}test${RESET} [pytest args]         Run the offline test suite (conventions, policy, per-template)
+  ${CYAN}check${RESET}                      lint + test + docs-check + catalog-check (what CI runs)
+  ${CYAN}docs${RESET} [--check]             Regenerate the parameter/output tables in each README
+  ${CYAN}catalog${RESET} [--check]          Regenerate the template catalog in README.md
+  ${CYAN}params${RESET} <target>            Show a template's parameters, defaults, and required set
+  ${CYAN}new${RESET} <group>/<name>         Scaffold a new template from templates/_template
+
+${BOLD}Online${RESET} (needs credentials; reads environments/<env>/env.json)
+  ${CYAN}deploy${RESET} <target> [--env E]  Create or update the stack
+  ${CYAN}diff${RESET}   <target> [--env E]  Show the change set a deploy would execute, then discard it
+  ${CYAN}delete${RESET} <target> [--env E]  Delete the stack (asks first)
+  ${CYAN}outputs${RESET} <target> [--env E] Print the stack's outputs
+  ${CYAN}events${RESET} <target> [--env E]  Tail recent stack events (most recent first)
+  ${CYAN}drift${RESET}  <target> [--env E]  Run drift detection and print the result
+
+${BOLD}Flags${RESET}
+  --env <name>     Environment under environments/ (default: ${DEFAULT_ENV}; or set CFN_ENV)
+  --param K=V      Override one parameter; repeatable, wins over the env's param file
+  --yes            Skip the confirmation prompt on destructive commands
+
+${BOLD}Examples${RESET}
+  ./bin/cfn check
+  ./bin/cfn params containers/fargate-service
+  ./bin/cfn diff container-service --env dev
+  ./bin/cfn deploy container-service --env dev --param DesiredCount=4
+EOF
+}
+
+cmd_list() {
+  printf '%sStacks%s   (deployable archetypes — nested compositions)\n' "$BOLD" "$RESET"
+  for d in stacks/*/; do
+    [[ -f "$d/template.yaml" ]] || continue
+    printf '  %-34s %s\n' "$(basename "$d")" "$(template_description "$d/template.yaml")"
+  done
+  printf '\n%sTemplates%s (the library — each is standalone and nestable)\n' "$BOLD" "$RESET"
+  local group=""
+  for f in templates/*/*/template.yaml; do
+    [[ -f "$f" ]] || continue
+    local g; g="$(basename "$(dirname "$(dirname "$f")")")"
+    [[ "$g" == "_template" ]] && continue
+    if [[ "$g" != "$group" ]]; then group="$g"; printf '  %s%s/%s\n' "$DIM" "$g" "$RESET"; fi
+    printf '    %-32s %s\n' "$(basename "$(dirname "$f")")" "$(template_description "$f")"
+  done
+}
+
+template_description() {
+  "$PY" -c '
+import sys
+sys.path.insert(0, "tests")
+from cfn_loader import load_template
+print((load_template(sys.argv[1]).get("Description") or "").split(".")[0])
+' "$1" 2>/dev/null || echo ""
+}
+
+cmd_lint() {
+  need_python_tools
+  if [[ $# -gt 0 ]]; then
+    info "cfn-lint $*"
+    "$CFN_LINT" "$@"
+  else
+    # Files are enumerated here rather than by a glob in .cfnlintrc.yaml: a glob
+    # that matches nothing is a hard error in cfn-lint, so an empty stacks/
+    # directory would break the whole lint run.
+    local files=()
+    while IFS= read -r f; do files+=("$f"); done < <(
+      find templates stacks -name template.yaml -not -path '*/_template/*' 2>/dev/null | sort
+    )
+    [[ ${#files[@]} -gt 0 ]] || { warn "no templates to lint"; return 0; }
+    info "cfn-lint (${#files[@]} templates)"
+    "$CFN_LINT" "${files[@]}"
+  fi
+  ok "cfn-lint clean"
+}
+
+cmd_test() {
+  [[ -n "$PYTEST" ]] || die "pytest not found. Run: make install"
+  info "pytest"
+  "$PYTEST" "$@"
+}
+
+cmd_docs() {
+  need_python_tools
+  "$PY" scripts/gen_docs.py "$@"
+}
+
+cmd_catalog() {
+  need_python_tools
+  "$PY" scripts/gen_catalog.py "$@"
+}
+
+cmd_check() {
+  cmd_lint
+  cmd_test -q
+  cmd_docs --check
+  cmd_catalog --check
+  ok "all checks passed"
+}
+
+cmd_params() {
+  local target="${1:-}"
+  [[ -n "$target" ]] || die "usage: cfn params <target>"
+  need_python_tools
+  "$PY" scripts/show_params.py "$(resolve_template "$target")"
+}
+
+cmd_new() {
+  local dir="${1:-}"
+  [[ -n "$dir" ]] || die "usage: cfn new <group>/<name>   e.g. cfn new data/redshift-serverless"
+  [[ "$dir" == */* ]] || die "target must be <group>/<name>, e.g. data/redshift-serverless"
+  local dest="templates/$dir"
+  [[ ! -d "$dest" ]] || die "$dest already exists"
+
+  mkdir -p "$(dirname "$dest")"
+  cp -R templates/_template "$dest"
+  # The scaffold's own tests are written against the scaffold; rename the module
+  # so pytest collects it under the new template's name.
+  local slug; slug="$(basename "$dir" | tr '-' '_')"
+  mv "$dest/tests/test_template.py" "$dest/tests/test_${slug}.py"
+
+  ok "created $dest"
+  cat <<EOF
+
+Next:
+  1. Edit $dest/template.yaml   (parameters, conditions, resources, outputs)
+  2. Edit $dest/metadata.yaml   (group, status, summary — feeds the catalog)
+  3. Fill in $dest/examples/basic/parameters.json
+  4. Write assertions in $dest/tests/test_${slug}.py
+  5. ./bin/cfn docs && ./bin/cfn catalog && ./bin/cfn check
+EOF
+}
+
+# --- online commands --------------------------------------------------------
+
+cmd_deploy() {
+  local target="$1" env="$2" yes="$3"; shift 3
+  local overrides=("$@")
+
+  need_aws
+  local tmpl slug stack pfile caps tags
+  tmpl="$(resolve_template "$target")"
+  slug="$(target_slug "$tmpl")"
+  stack="$(stack_name "$env" "$slug")"
+  caps="$(env_capabilities "$env")"
+  tags="$(env_tags "$env" "$slug")"
+
+  local deploy_tmpl="$tmpl"
+  if needs_packaging "$tmpl"; then
+    mkdir -p .cfn-build
+    deploy_tmpl="$(package_template "$env" "$tmpl" ".cfn-build/$slug.packaged.yaml")"
+  fi
+
+  PARAMS=()
+  pfile="$(param_file "$env" "$slug" || true)"
+  if [[ -n "$pfile" ]]; then
+    info "parameters from $pfile"
+    # Merge the file with any --param overrides; overrides win.
+    read_params < <("$PY" scripts/merge_params.py "$pfile" "${overrides[@]+"${overrides[@]}"}")
+  elif [[ ${#overrides[@]} -gt 0 ]]; then
+    read_params < <("$PY" scripts/merge_params.py --none "${overrides[@]}")
+  else
+    warn "no parameter file at environments/$env/params/$slug.json and no --param flags; using template defaults"
+  fi
+
+  info "deploying $BOLD$stack$RESET from $deploy_tmpl"
+  [[ "$yes" == "yes" ]] || confirm "Deploy $stack to environment '$env'?"
+
+  # shellcheck disable=SC2046,SC2086
+  aws $(aws_flags "$env") cloudformation deploy \
+    --stack-name "$stack" \
+    --template-file "$deploy_tmpl" \
+    --capabilities $caps \
+    --tags $tags \
+    --no-fail-on-empty-changeset \
+    ${PARAMS[0]+--parameter-overrides "${PARAMS[@]}"}
+
+  ok "$stack deployed"
+  cmd_outputs "$target" "$env"
+}
+
+cmd_diff() {
+  local target="$1" env="$2"; shift 2
+  local overrides=("$@")
+
+  need_aws
+  local tmpl slug stack caps
+  tmpl="$(resolve_template "$target")"
+  slug="$(target_slug "$tmpl")"
+  stack="$(stack_name "$env" "$slug")"
+  caps="$(env_capabilities "$env")"
+
+  local deploy_tmpl="$tmpl"
+  if needs_packaging "$tmpl"; then
+    mkdir -p .cfn-build
+    deploy_tmpl="$(package_template "$env" "$tmpl" ".cfn-build/$slug.packaged.yaml")"
+  fi
+
+  PARAMS=()
+  local pfile; pfile="$(param_file "$env" "$slug" || true)"
+  if [[ -n "$pfile" ]]; then
+    read_params < <("$PY" scripts/merge_params.py "$pfile" "${overrides[@]+"${overrides[@]}"}")
+  fi
+
+  # `deploy --no-execute-changeset` builds the change set without running it,
+  # which is the closest CloudFormation gets to `terraform plan`.
+  info "building change set for $BOLD$stack$RESET (nothing is applied)"
+  local out
+  # shellcheck disable=SC2046,SC2086
+  out="$(aws $(aws_flags "$env") cloudformation deploy \
+    --stack-name "$stack" \
+    --template-file "$deploy_tmpl" \
+    --capabilities $caps \
+    --no-execute-changeset \
+    --no-fail-on-empty-changeset \
+    ${PARAMS[0]+--parameter-overrides "${PARAMS[@]}"} 2>&1)" || { printf '%s\n' "$out"; die "change set failed"; }
+
+  local csid
+  csid="$(printf '%s\n' "$out" | grep -oE 'arn:aws[a-zA-Z-]*:cloudformation:[^ ]*changeSet/[^ ]*' | head -1 || true)"
+  if [[ -z "$csid" ]]; then
+    printf '%s\n' "$out"
+    ok "no changes"
+    return
+  fi
+
+  # shellcheck disable=SC2046
+  aws $(aws_flags "$env") cloudformation describe-change-set --change-set-name "$csid" \
+    --query 'Changes[].ResourceChange.{Action:Action,Logical:LogicalResourceId,Type:ResourceType,Replacement:Replacement}' \
+    --output table
+
+  # shellcheck disable=SC2046
+  aws $(aws_flags "$env") cloudformation delete-change-set --change-set-name "$csid" >/dev/null
+  ok "change set described and discarded"
+}
+
+cmd_delete() {
+  local target="$1" env="$2" yes="$3"
+  need_aws
+  local tmpl slug stack
+  tmpl="$(resolve_template "$target")"
+  slug="$(target_slug "$tmpl")"
+  stack="$(stack_name "$env" "$slug")"
+
+  [[ "$yes" == "yes" ]] || confirm "${RED}DELETE${RESET} stack $stack in environment '$env'? This destroys its resources."
+  # shellcheck disable=SC2046
+  aws $(aws_flags "$env") cloudformation delete-stack --stack-name "$stack"
+  info "waiting for $stack to finish deleting"
+  # shellcheck disable=SC2046
+  aws $(aws_flags "$env") cloudformation wait stack-delete-complete --stack-name "$stack"
+  ok "$stack deleted"
+}
+
+cmd_outputs() {
+  local target="$1" env="$2"
+  need_aws
+  local stack; stack="$(stack_name "$env" "$(target_slug "$(resolve_template "$target")")")"
+  # shellcheck disable=SC2046
+  aws $(aws_flags "$env") cloudformation describe-stacks --stack-name "$stack" \
+    --query 'Stacks[0].Outputs[].{Output:OutputKey,Value:OutputValue,Description:Description}' \
+    --output table
+}
+
+cmd_events() {
+  local target="$1" env="$2"
+  need_aws
+  local stack; stack="$(stack_name "$env" "$(target_slug "$(resolve_template "$target")")")"
+  # shellcheck disable=SC2046
+  aws $(aws_flags "$env") cloudformation describe-stack-events --stack-name "$stack" \
+    --query 'StackEvents[:40].{Time:Timestamp,Status:ResourceStatus,Resource:LogicalResourceId,Reason:ResourceStatusReason}' \
+    --output table
+}
+
+cmd_drift() {
+  local target="$1" env="$2"
+  need_aws
+  local stack; stack="$(stack_name "$env" "$(target_slug "$(resolve_template "$target")")")"
+  local id
+  # shellcheck disable=SC2046
+  id="$(aws $(aws_flags "$env") cloudformation detect-stack-drift --stack-name "$stack" \
+    --query StackDriftDetectionId --output text)"
+  info "drift detection $id started; polling"
+  local status=""
+  while :; do
+    # shellcheck disable=SC2046
+    status="$(aws $(aws_flags "$env") cloudformation describe-stack-drift-detection-status \
+      --stack-drift-detection-id "$id" --query DetectionStatus --output text)"
+    [[ "$status" == "DETECTION_IN_PROGRESS" ]] || break
+    sleep 5
+  done
+  # shellcheck disable=SC2046
+  aws $(aws_flags "$env") cloudformation describe-stack-resource-drifts --stack-name "$stack" \
+    --query 'StackResourceDrifts[].{Resource:LogicalResourceId,Type:ResourceType,Drift:StackResourceDriftStatus}' \
+    --output table
+}
+
+# Read newline-separated stdin into the global `PARAMS` array. `mapfile` would be
+# the obvious tool, but macOS ships bash 3.2, which does not have it — and this
+# script has to run on the laptop it was written on.
+read_params() {
+  PARAMS=()
+  local line
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && PARAMS+=("$line")
+  done
+}
+
+confirm() {
+  printf '%s [y/N] ' "$1"
+  local reply; read -r reply
+  [[ "$reply" =~ ^[Yy]$ ]] || die "aborted"
+}
+
+# --- argument parsing -------------------------------------------------------
+
+main() {
+  local cmd="${1:-help}"; shift || true
+
+  case "$cmd" in
+    help|-h|--help) cmd_help; return ;;
+    list)     cmd_list; return ;;
+    lint)     cmd_lint "$@"; return ;;
+    test)     cmd_test "$@"; return ;;
+    check)    cmd_check; return ;;
+    docs)     cmd_docs "$@"; return ;;
+    catalog)  cmd_catalog "$@"; return ;;
+    params)   cmd_params "$@"; return ;;
+    new)      cmd_new "$@"; return ;;
+  esac
+
+  # Online commands share a flag grammar: <target> [--env E] [--param K=V] [--yes]
+  local target="" env="$DEFAULT_ENV" yes="no"
+  local overrides=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --env)   env="$2"; shift 2 ;;
+      --param) overrides+=("$2"); shift 2 ;;
+      --yes|-y) yes="yes"; shift ;;
+      -*)      die "unknown flag $1" ;;
+      *)       target="$1"; shift ;;
+    esac
+  done
+
+  case "$cmd" in
+    deploy)  [[ -n "$target" ]] || die "usage: cfn deploy <target> [--env E]"
+             cmd_deploy "$target" "$env" "$yes" "${overrides[@]+"${overrides[@]}"}" ;;
+    diff)    [[ -n "$target" ]] || die "usage: cfn diff <target> [--env E]"
+             cmd_diff "$target" "$env" "${overrides[@]+"${overrides[@]}"}" ;;
+    delete)  [[ -n "$target" ]] || die "usage: cfn delete <target> [--env E]"
+             cmd_delete "$target" "$env" "$yes" ;;
+    outputs) [[ -n "$target" ]] || die "usage: cfn outputs <target> [--env E]"
+             cmd_outputs "$target" "$env" ;;
+    events)  [[ -n "$target" ]] || die "usage: cfn events <target> [--env E]"
+             cmd_events "$target" "$env" ;;
+    drift)   [[ -n "$target" ]] || die "usage: cfn drift <target> [--env E]"
+             cmd_drift "$target" "$env" ;;
+    *)       die "unknown command '$cmd'. Run: ./bin/cfn help" ;;
+  esac
+}
+
+main "$@"

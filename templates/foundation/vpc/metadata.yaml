@@ -1,0 +1,3 @@
+group: foundation
+status: stable
+summary: Multi-AZ VPC with public/private subnets, chosen NAT posture, endpoints, flow logs

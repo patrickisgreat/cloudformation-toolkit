@@ -1,0 +1,26 @@
+[
+  {
+    "ParameterKey": "NamePrefix",
+    "ParameterValue": "example-app"
+  },
+  {
+    "ParameterKey": "RepositorySuffix",
+    "ParameterValue": "api"
+  },
+  {
+    "ParameterKey": "ImageTagMutability",
+    "ParameterValue": "IMMUTABLE"
+  },
+  {
+    "ParameterKey": "ScanOnPush",
+    "ParameterValue": "true"
+  },
+  {
+    "ParameterKey": "KeepLastNImages",
+    "ParameterValue": "30"
+  },
+  {
+    "ParameterKey": "ExpireUntaggedAfterDays",
+    "ParameterValue": "14"
+  }
+]

@@ -1,0 +1,9 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-net" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "VpcCidr", "ParameterValue": "10.20.0.0/16" },
+  { "ParameterKey": "AvailabilityZoneCount", "ParameterValue": "2" },
+  { "ParameterKey": "NatGatewayMode", "ParameterValue": "single" },
+  { "ParameterKey": "EnableS3Endpoint", "ParameterValue": "true" },
+  { "ParameterKey": "EnableDynamoDbEndpoint", "ParameterValue": "true" }
+]

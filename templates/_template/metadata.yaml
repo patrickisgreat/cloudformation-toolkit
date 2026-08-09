@@ -1,0 +1,9 @@
+# Catalog metadata — consumed by scripts/gen_catalog.py to build the tables in
+# the root README.md.
+#
+# group    must match the directory this template lives under (templates/<group>/)
+# status   experimental | beta | stable  (see docs/CONVENTIONS.md for the criteria)
+# summary  one line, under 110 characters — it becomes one row in the catalog
+group: foundation
+status: experimental
+summary: TODO — one line saying what this template provisions.

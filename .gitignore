@@ -1,0 +1,27 @@
+# Python virtualenv used for the dev toolchain (cfn-lint, pytest)
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Templates rewritten by `aws cloudformation package` — build output, not source.
+*.packaged.yaml
+*.packaged.json
+.cfn-build/
+
+# Rendered change sets and describe output
+*.changeset.json
+
+# Environment overrides that may carry account-specific or sensitive values.
+# Commit the checked-in *.json parameter files; keep local overrides out.
+*.local.json
+environments/**/secrets.json
+
+# AWS SAM / CDK build noise, if either is used alongside this repo
+.aws-sam/
+cdk.out/
+
+# Editor / OS noise
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,8 @@
+# Dev toolchain. Install with `make install` (creates .venv) or
+# `pip install -r requirements-dev.txt` into an environment of your choosing.
+#
+# Deliberately small: everything here runs offline with no AWS credentials, so
+# the whole check suite is available on a laptop and in CI without a role.
+cfn-lint>=1.22,<2
+pytest>=8.0
+PyYAML>=6.0

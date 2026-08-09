@@ -1,0 +1,9 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-app" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "GitHubOrg", "ParameterValue": "patrickisgreat" },
+  { "ParameterKey": "GitHubRepo", "ParameterValue": "cloudformation-toolkit" },
+  { "ParameterKey": "AllowedBranch", "ParameterValue": "main" },
+  { "ParameterKey": "CreateOidcProvider", "ParameterValue": "true" },
+  { "ParameterKey": "GrantCloudFormationDeploy", "ParameterValue": "true" }
+]

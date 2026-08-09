@@ -1,0 +1,3 @@
+group: foundation
+status: stable
+summary: GitHub Actions OIDC deploy role scoped to one repo and ref, no long-lived keys

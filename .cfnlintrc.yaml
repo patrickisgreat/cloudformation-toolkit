@@ -1,0 +1,51 @@
+# cfn-lint configuration. Run with `make lint` (or `./bin/cfn lint`).
+#
+# cfn-lint is the closest thing CloudFormation has to a compiler: it validates
+# templates against the resource-provider schemas, so it catches misspelled
+# properties, wrong types, invalid enum values, and bad !GetAtt targets — none of
+# which `aws cloudformation validate-template` will tell you.
+#
+# It runs at default strictness (errors AND warnings fail). The three rules
+# suppressed below are suppressed for stated reasons, not because they were
+# noisy. Everything else stays on.
+# No `templates:` glob here on purpose. cfn-lint treats a glob that matches
+# nothing as a hard error (E0003), which makes the config break whenever a
+# directory is empty. `bin/cfn lint` enumerates the files with `find` and passes
+# them explicitly, so this file only holds the rules.
+
+ignore_templates:
+  # The scaffold is a skeleton that gets copied, not deployed. It carries
+  # placeholder values that would fail schema checks by design.
+  - templates/_template/template.yaml
+
+ignore_checks:
+  # W1030 — "value is shorter than 1 when Ref is resolved".
+  #
+  # This library uses the empty string as CloudFormation's missing "unset"
+  # sentinel: an optional ARN parameter defaults to "", a Condition tests it, and
+  # the property resolves to AWS::NoValue when it is empty. cfn-lint evaluates
+  # the property in isolation and cannot see that the Condition makes the empty
+  # case unreachable, so it flags every optional-ARN parameter in the repo.
+  #
+  # The guard is not lost, it moved: `tests/` asserts the Fn::If / AWS::NoValue
+  # wiring per template, which is a stronger check than the length rule — it
+  # verifies the property disappears rather than merely that it is non-empty.
+  - W1030
+
+  # W3002 — "resource requires a `package` command before deploy".
+  #
+  # True and intended. Stacks under stacks/ reference child templates by relative
+  # path; `bin/cfn deploy` detects nested stacks and runs `aws cloudformation
+  # package` to upload them and rewrite the URLs. Committing S3 URLs instead
+  # would make the templates account-specific.
+  - W3002
+
+  # W3011 — "both UpdateReplacePolicy and DeletionPolicy are needed".
+  #
+  # Enforced by the STATEFUL_DELETION_POLICY rule in tests/test_policy.py, which
+  # covers a curated list of stateful resource types, explains *why* on failure,
+  # and has an exemption ledger. The duplicate warning adds noise, not coverage.
+  - W3011
+
+regions:
+  - us-east-1

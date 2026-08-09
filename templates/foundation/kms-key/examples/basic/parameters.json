@@ -1,0 +1,6 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-app" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "AliasSuffix", "ParameterValue": "data" },
+  { "ParameterKey": "ServicePrincipal", "ParameterValue": "logs.amazonaws.com" }
+]

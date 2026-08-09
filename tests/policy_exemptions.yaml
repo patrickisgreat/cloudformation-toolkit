@@ -1,0 +1,18 @@
+# Security policy exemption ledger.
+#
+# Every entry suppresses exactly one (template, rule, resource) finding from
+# tests/test_policy.py and must carry a written justification. The loader
+# rejects a placeholder reason, and `test_every_exemption_is_still_needed`
+# fails when an entry stops matching anything — so this file cannot quietly
+# accumulate dead suppressions the way a linter baseline does.
+#
+# Fields:
+#   template  path to the template directory, e.g. templates/data/s3-bucket
+#   rule      rule id from tests/test_policy.py (RULES)
+#   resource  logical id, or "*" for every resource in that template
+#   reason    why the rule does not apply here — for a reviewer, not for a linter
+#
+# Before adding one, ask whether the rule is wrong. A rule that needs many
+# exemptions is a badly written rule; fix the rule instead.
+
+exemptions: []

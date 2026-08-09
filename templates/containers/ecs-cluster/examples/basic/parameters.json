@@ -1,0 +1,9 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-app" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "OnDemandBaseCount", "ParameterValue": "1" },
+  { "ParameterKey": "OnDemandWeight", "ParameterValue": "1" },
+  { "ParameterKey": "SpotWeight", "ParameterValue": "3" },
+  { "ParameterKey": "ContainerInsights", "ParameterValue": "enabled" },
+  { "ParameterKey": "EnableExecuteCommandLogging", "ParameterValue": "true" }
+]
