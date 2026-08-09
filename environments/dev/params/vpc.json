@@ -1,0 +1,10 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "toolkit-dev" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "VpcCidr", "ParameterValue": "10.10.0.0/16" },
+  { "ParameterKey": "AvailabilityZoneCount", "ParameterValue": "2" },
+  { "ParameterKey": "NatGatewayMode", "ParameterValue": "single" },
+  { "ParameterKey": "EnableS3Endpoint", "ParameterValue": "true" },
+  { "ParameterKey": "EnableDynamoDbEndpoint", "ParameterValue": "true" },
+  { "ParameterKey": "EnableFlowLogs", "ParameterValue": "false" }
+]

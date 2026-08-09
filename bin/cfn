@@ -303,10 +303,24 @@ cmd_new() {
 
   mkdir -p "$(dirname "$dest")"
   cp -R templates/_template "$dest"
+
   # The scaffold's own tests are written against the scaffold; rename the module
   # so pytest collects it under the new template's name.
   local slug; slug="$(basename "$dir" | tr '-' '_')"
   mv "$dest/tests/test_template.py" "$dest/tests/test_${slug}.py"
+
+  # metadata.yaml declares a group, and the conventions suite requires it to
+  # match the directory. Rewriting it here is what keeps a scaffolded template
+  # passing `cfn check` from the moment it is created.
+  local group; group="$(dirname "$dir")"
+  "$PY" - "$dest/metadata.yaml" "$group" <<'PY'
+import re, sys
+path, group = sys.argv[1], sys.argv[2]
+with open(path) as fh:
+    text = fh.read()
+with open(path, "w") as fh:
+    fh.write(re.sub(r"^group:.*$", f"group: {group}", text, count=1, flags=re.MULTILINE))
+PY
 
   ok "created $dest"
   cat <<EOF

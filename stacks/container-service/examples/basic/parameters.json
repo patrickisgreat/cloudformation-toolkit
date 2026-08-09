@@ -1,0 +1,14 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-app" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "ImageUri", "ParameterValue": "public.ecr.aws/nginx/nginx:stable" },
+  { "ParameterKey": "ContainerPort", "ParameterValue": "80" },
+  { "ParameterKey": "HealthCheckPath", "ParameterValue": "/" },
+  { "ParameterKey": "HostedZoneId", "ParameterValue": "Z0123456789ABCDEFGHIJ" },
+  { "ParameterKey": "DomainName", "ParameterValue": "api.example.com" },
+  { "ParameterKey": "Cpu", "ParameterValue": "512" },
+  { "ParameterKey": "Memory", "ParameterValue": "1024" },
+  { "ParameterKey": "MinCapacity", "ParameterValue": "2" },
+  { "ParameterKey": "MaxCapacity", "ParameterValue": "10" },
+  { "ParameterKey": "NatGatewayMode", "ParameterValue": "single" }
+]

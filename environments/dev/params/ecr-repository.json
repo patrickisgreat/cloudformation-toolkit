@@ -1,0 +1,8 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "toolkit" },
+  { "ParameterKey": "RepositorySuffix", "ParameterValue": "app" },
+  { "ParameterKey": "ImageTagMutability", "ParameterValue": "IMMUTABLE" },
+  { "ParameterKey": "ScanOnPush", "ParameterValue": "true" },
+  { "ParameterKey": "KeepLastNImages", "ParameterValue": "30" },
+  { "ParameterKey": "ExpireUntaggedAfterDays", "ParameterValue": "14" }
+]

@@ -1,0 +1,53 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  # A superseded run tells you nothing. Cancel it.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: lint + test + docs + catalog
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install the toolchain
+        run: pip install -r requirements-dev.txt
+
+      # Every one of these runs offline. No AWS credentials are configured for
+      # this job on purpose: a check that needs an account is a check that stops
+      # running on forks and on PRs from outside the org.
+      - name: cfn-lint
+        run: ./bin/cfn lint
+
+      - name: Offline test suite
+        run: pytest -q
+
+      - name: Generated docs are up to date
+        run: python3 scripts/gen_docs.py --check
+
+      - name: Catalog is up to date
+        run: python3 scripts/gen_catalog.py --check
+
+  shellcheck:
+    name: shellcheck bin/cfn
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint the CLI
+        run: shellcheck --severity=warning bin/cfn

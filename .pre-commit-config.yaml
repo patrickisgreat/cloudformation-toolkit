@@ -1,0 +1,47 @@
+# Run `pre-commit install` once to enable. CI runs the same checks, so this only
+# moves the feedback earlier — it is not a second source of truth.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-merge-conflict
+      - id: check-yaml
+        # CloudFormation's intrinsic tags (!Ref, !GetAtt) are not valid YAML to a
+        # stock parser. cfn-lint validates these files properly.
+        exclude: ^(templates|stacks)/.*/template\.yaml$
+      - id: check-json
+      - id: detect-private-key
+      - id: detect-aws-credentials
+        args: [--allow-missing-credentials]
+
+  - repo: local
+    hooks:
+      - id: cfn-lint
+        name: cfn-lint templates
+        entry: ./bin/cfn lint
+        language: system
+        pass_filenames: false
+        files: ^(templates|stacks)/.*\.yaml$
+
+      - id: cfn-tests
+        name: offline template tests
+        entry: ./bin/cfn test -q
+        language: system
+        pass_filenames: false
+        files: ^(templates|stacks|tests|environments)/
+
+      - id: cfn-docs
+        name: regenerate template docs
+        entry: python3 scripts/gen_docs.py
+        language: system
+        pass_filenames: false
+        files: ^(templates|stacks)/.*/(template\.yaml|README\.md)$
+
+      - id: cfn-catalog
+        name: regenerate the README catalog
+        entry: python3 scripts/gen_catalog.py
+        language: system
+        pass_filenames: false
+        files: ^((templates|stacks)/.*/metadata\.yaml|README\.md|scripts/gen_catalog\.py)$

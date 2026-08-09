@@ -1,0 +1,3 @@
+group: stacks
+status: stable
+summary: Network, registry, cluster, ALB, TLS, DNS, autoscaling Fargate service and alarms
