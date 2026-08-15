@@ -1,0 +1,5 @@
+# Catalog metadata — consumed by scripts/gen_catalog.py to build the tables in
+# the root README.md.
+group: foundation
+status: beta
+summary: Cognito user pool with hardened defaults, a public SPA app client, and an optional hosted UI domain
