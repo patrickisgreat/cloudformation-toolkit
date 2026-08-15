@@ -1,0 +1,5 @@
+# Catalog metadata — consumed by scripts/gen_catalog.py to build the tables in
+# the root README.md.
+group: networking
+status: stable
+summary: CloudFront distribution for a private S3 origin (OAC) or an HTTPS custom origin, with SPA and WAF hooks

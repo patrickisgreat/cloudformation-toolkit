@@ -1,0 +1,277 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >-
+  CloudFront distribution with a single origin - an S3 bucket reached through
+  Origin Access Control, or any HTTPS custom origin - with TLS 1.2+, optional
+  custom domain, SPA fallback, and a WAF hook.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Naming
+        Parameters:
+          - NamePrefix
+          - Environment
+      - Label:
+          default: Origin
+        Parameters:
+          - OriginDomainName
+          - OriginType
+          - OriginPath
+      - Label:
+          default: Caching and behavior
+        Parameters:
+          - CachePolicyId
+          - OriginRequestPolicyId
+          - DefaultRootObject
+          - EnableSpaFallback
+      - Label:
+          default: Custom domain
+        Parameters:
+          - AlternateDomainNames
+          - CertificateArn
+      - Label:
+          default: Delivery and protection
+        Parameters:
+          - PriceClass
+          - WebAclArn
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Description: Prefix used in the distribution comment and the OAC name.
+    AllowedPattern: "^[a-z][a-z0-9-]{1,30}[a-z0-9]$"
+    ConstraintDescription: 3-32 lowercase characters, digits and hyphens.
+
+  Environment:
+    Type: String
+    Description: Environment this distribution serves.
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+
+  OriginDomainName:
+    Type: String
+    Description: >-
+      Origin to pull from. For S3 use the bucket's *regional* domain
+      (my-bucket.s3.us-east-1.amazonaws.com, the RegionalDomainName output of
+      data/s3-bucket) - the global s3.amazonaws.com form redirects during the
+      first hours of a new bucket's life and CloudFront caches the redirect. For
+      a custom origin use the ALB or API DNS name.
+    AllowedPattern: "^([a-z0-9-]+\\.)+[a-z0-9-]+$"
+    ConstraintDescription: A lowercase DNS name, not a URL.
+
+  OriginType:
+    Type: String
+    Description: >-
+      s3 signs requests to a private bucket with Origin Access Control; custom
+      speaks HTTPS to anything with a public DNS name (ALB, API Gateway). With
+      s3 the bucket stays private - see the README for the bucket policy that
+      lets this distribution in.
+    Default: s3
+    AllowedValues: [s3, custom]
+
+  OriginPath:
+    Type: String
+    Description: >-
+      Path prepended to every origin request, e.g. /site to serve from a
+      bucket's /site prefix. Starts with /, no trailing slash. Leave empty for
+      the origin root.
+    Default: ""
+    AllowedPattern: "^$|^/.*[^/]$"
+    ConstraintDescription: Empty, or a path starting with / and not ending with one.
+
+  CachePolicyId:
+    Type: String
+    Description: >-
+      Managed or custom cache policy. The default is the managed
+      CachingOptimized policy, right for static assets. For an API origin use
+      CachingDisabled (4135ea2d-6df8-44a3-9df3-4b5a84be39ad) - caching an
+      authenticated API response and serving it to the next caller is the
+      classic CDN incident.
+    Default: 658327ea-f89d-4fab-a63d-7e88639e58f6
+    AllowedPattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    ConstraintDescription: A cache policy ID (UUID).
+
+  OriginRequestPolicyId:
+    Type: String
+    Description: >-
+      What gets forwarded to the origin beyond the cache key. Leave empty for S3
+      - forwarding the Host header to S3 breaks OAC signing. For an API origin
+      use the managed AllViewerExceptHostHeader policy
+      (b689b0a8-53d0-40ab-baf2-68738e2966ac) so query strings, cookies and
+      Authorization headers reach it.
+    Default: ""
+    AllowedPattern: "^$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    ConstraintDescription: Empty, or an origin request policy ID (UUID).
+
+  DefaultRootObject:
+    Type: String
+    Description: >-
+      Object served for requests to the bare domain, so https://example.com
+      returns /index.html rather than an S3 error. Set empty for an API origin,
+      where / is a real route.
+    Default: index.html
+
+  EnableSpaFallback:
+    Type: String
+    Description: >-
+      Rewrite 403 and 404 responses to /index.html with a 200, so a single-page
+      app's client-side routes survive a page reload. A private S3 origin
+      returns 403 (not 404) for missing keys, which is why both codes are
+      rewritten. Leave off for anything that is not an SPA - it turns every
+      broken asset link into a soft 200 of your index page.
+    Default: "false"
+    AllowedValues: ["true", "false"]
+
+  AlternateDomainNames:
+    Type: String
+    Description: >-
+      Comma-separated domains this distribution answers to, e.g.
+      "example.com,www.example.com". Only applied together with CertificateArn -
+      CloudFront rejects an alias the certificate does not cover.
+    Default: ""
+
+  CertificateArn:
+    Type: String
+    Description: >-
+      ACM certificate covering every alternate domain name. Must live in
+      us-east-1 regardless of where anything else is - a certificate in any
+      other region fails with an error that reads like the ARN is invalid.
+      Leave empty to serve on the *.cloudfront.net domain only.
+    Default: ""
+
+  PriceClass:
+    Type: String
+    Description: >-
+      Which edge locations serve this distribution. PriceClass_100 (NA + EU) is
+      the cheapest; PriceClass_All adds the most expensive regions and raises
+      the per-GB rate for traffic from them. Viewers outside the class still get
+      served, just from a farther edge.
+    Default: PriceClass_100
+    AllowedValues: [PriceClass_100, PriceClass_200, PriceClass_All]
+
+  WebAclArn:
+    Type: String
+    Description: >-
+      WAFv2 web ACL to attach. Must have Scope CLOUDFRONT, which means it lives
+      in us-east-1 like the certificate. Leave empty for none.
+    Default: ""
+
+Conditions:
+  IsS3Origin: !Equals [!Ref OriginType, s3]
+  HasOriginPath: !Not [!Equals [!Ref OriginPath, ""]]
+  HasOriginRequestPolicy: !Not [!Equals [!Ref OriginRequestPolicyId, ""]]
+  HasDefaultRootObject: !Not [!Equals [!Ref DefaultRootObject, ""]]
+  HasSpaFallback: !Equals [!Ref EnableSpaFallback, "true"]
+  # Both halves or neither: an alias without a covering certificate is rejected
+  # by CloudFront, and a certificate with no alias does nothing. Requiring the
+  # pair means a caller who sets only one gets the default *.cloudfront.net
+  # setup instead of a failed deploy.
+  HasCustomDomain: !And
+    - !Not [!Equals [!Ref AlternateDomainNames, ""]]
+    - !Not [!Equals [!Ref CertificateArn, ""]]
+  HasWebAcl: !Not [!Equals [!Ref WebAclArn, ""]]
+
+Resources:
+  OriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Condition: IsS3Origin
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${NamePrefix}-${Environment}-oac"
+        Description: !Sub "Signs ${NamePrefix} ${Environment} requests to the S3 origin"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Comment: !Sub "${NamePrefix}-${Environment}"
+        Enabled: true
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        PriceClass: !Ref PriceClass
+        DefaultRootObject: !If [HasDefaultRootObject, !Ref DefaultRootObject, !Ref "AWS::NoValue"]
+        Aliases: !If
+          - HasCustomDomain
+          - !Split [",", !Ref AlternateDomainNames]
+          - !Ref AWS::NoValue
+        Origins:
+          - Id: origin
+            DomainName: !Ref OriginDomainName
+            OriginPath: !If [HasOriginPath, !Ref OriginPath, !Ref "AWS::NoValue"]
+            OriginAccessControlId: !If [IsS3Origin, !GetAtt OriginAccessControl.Id, !Ref "AWS::NoValue"]
+            # OAC replaced the legacy Origin Access Identity; the empty
+            # OriginAccessIdentity is the documented way to say "OAC only".
+            S3OriginConfig: !If
+              - IsS3Origin
+              - OriginAccessIdentity: ""
+              - !Ref AWS::NoValue
+            CustomOriginConfig: !If
+              - IsS3Origin
+              - !Ref AWS::NoValue
+              # https-only: the viewer-facing TLS policy below is meaningless if
+              # the second leg downgrades to plain HTTP inside AWS's network.
+              - OriginProtocolPolicy: https-only
+                OriginSSLProtocols: [TLSv1.2]
+        DefaultCacheBehavior:
+          TargetOriginId: origin
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          # An S3 origin only ever answers reads; a custom origin is usually an
+          # API, which needs the write verbs to pass through.
+          AllowedMethods: !If
+            - IsS3Origin
+            - [GET, HEAD]
+            - [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+          CachedMethods: [GET, HEAD]
+          CachePolicyId: !Ref CachePolicyId
+          OriginRequestPolicyId: !If [HasOriginRequestPolicy, !Ref OriginRequestPolicyId, !Ref "AWS::NoValue"]
+        CustomErrorResponses: !If
+          - HasSpaFallback
+          # Short error caching so a genuinely missing index.html does not pin
+          # the failure at the edge for the default 10 minutes.
+          - - ErrorCode: 403
+              ResponseCode: 200
+              ResponsePagePath: /index.html
+              ErrorCachingMinTTL: 10
+            - ErrorCode: 404
+              ResponseCode: 200
+              ResponsePagePath: /index.html
+              ErrorCachingMinTTL: 10
+          - !Ref AWS::NoValue
+        ViewerCertificate:
+          AcmCertificateArn: !If [HasCustomDomain, !Ref CertificateArn, !Ref "AWS::NoValue"]
+          SslSupportMethod: !If [HasCustomDomain, sni-only, !Ref "AWS::NoValue"]
+          MinimumProtocolVersion: !If [HasCustomDomain, TLSv1.2_2021, !Ref "AWS::NoValue"]
+          CloudFrontDefaultCertificate: !If [HasCustomDomain, !Ref "AWS::NoValue", true]
+        WebACLId: !If [HasWebAcl, !Ref WebAclArn, !Ref "AWS::NoValue"]
+
+Outputs:
+  DistributionId:
+    Description: Distribution ID, for invalidations (aws cloudfront create-invalidation).
+    Value: !Ref Distribution
+
+  DistributionArn:
+    Description: >-
+      Distribution ARN, for the aws:SourceArn condition in the origin bucket's
+      policy - see the README for the statement to add.
+    Value: !Sub "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}"
+
+  DistributionDomainName:
+    Description: The *.cloudfront.net domain, the target for a Route 53 alias record.
+    Value: !GetAtt Distribution.DomainName
+
+  DistributionHostedZoneId:
+    Description: >-
+      Hosted zone ID for the alias record target. Z2FDTNDATAQYW2 for every
+      CloudFront distribution, output here so callers never hardcode it.
+    Value: Z2FDTNDATAQYW2
+
+  OriginAccessControlId:
+    Description: OAC ID, when the origin is S3.
+    Condition: IsS3Origin
+    Value: !GetAtt OriginAccessControl.Id
