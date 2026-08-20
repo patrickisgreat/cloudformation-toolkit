@@ -1,0 +1,8 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "myapp" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "VpcId", "ParameterValue": "vpc-0123456789abcdef0" },
+  { "ParameterKey": "SubnetId1", "ParameterValue": "subnet-0123456789abcdef0" },
+  { "ParameterKey": "SubnetId2", "ParameterValue": "subnet-0123456789abcdef1" },
+  { "ParameterKey": "ClientSecurityGroupId", "ParameterValue": "sg-0123456789abcdef0" }
+]

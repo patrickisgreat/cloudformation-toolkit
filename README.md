@@ -84,6 +84,7 @@ together; none define resources inline.
 | Template | Status | Description |
 |----------|--------|-------------|
 | [`data/athena-workgroup`](templates/data/athena-workgroup) | stable | Athena workgroup with enforced result location, encryption and a scan cutoff |
+| [`data/efs-filesystem`](templates/data/efs-filesystem) | stable | Encrypted EFS with mount targets, TLS-only policy, IA lifecycle, and a POSIX access point |
 | [`data/firehose-to-s3`](templates/data/firehose-to-s3) | stable | Firehose delivery to S3 with Hive partitioning, compression and an error prefix |
 | [`data/glue-etl`](templates/data/glue-etl) | stable | Glue catalog database, incremental crawler, and a bookmarked Spark ETL job |
 | [`data/kinesis-stream`](templates/data/kinesis-stream) | stable | Kinesis Data Stream, on-demand or provisioned, encrypted, with enhanced fan-out |

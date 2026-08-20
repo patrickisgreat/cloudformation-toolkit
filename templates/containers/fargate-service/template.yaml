@@ -43,6 +43,12 @@ Metadata:
           - EnvVar4Name
           - EnvVar4Value
       - Label:
+          default: Persistent storage (EFS)
+        Parameters:
+          - EfsFileSystemId
+          - EfsAccessPointId
+          - EfsMountPath
+      - Label:
           default: Injected secrets
         Parameters:
           - Secret1Name
@@ -452,6 +458,28 @@ Parameters:
     Default: "true"
     AllowedValues: ["true", "false"]
 
+  EfsFileSystemId:
+    Type: String
+    Description: >-
+      EFS file system to mount into the container (from data/efs-filesystem).
+      Leave empty for no persistent volume — Fargate ephemeral storage vanishes
+      with the task.
+    Default: ""
+
+  EfsAccessPointId:
+    Type: String
+    Description: >-
+      EFS access point to mount through. When set, the mount authorizes via IAM
+      and the task role is granted client access scoped to this access point —
+      the recommended posture. Requires EfsFileSystemId.
+    Default: ""
+
+  EfsMountPath:
+    Type: String
+    Description: Path inside the container where the EFS volume mounts.
+    Default: /data
+    AllowedPattern: "^/[a-zA-Z0-9-_/]*$"
+
   TaskRoleManagedPolicyArn:
     Type: String
     Description: >-
@@ -474,6 +502,8 @@ Conditions:
   HasSecret2JsonKey: !Not [!Equals [!Ref Secret2JsonKey, ""]]
   HasAnySecret: !Or [!Condition HasSecret1, !Condition HasSecret2]
   HasTaskPolicy: !Not [!Equals [!Ref TaskRoleManagedPolicyArn, ""]]
+  HasEfsVolume: !Not [!Equals [!Ref EfsFileSystemId, ""]]
+  HasEfsAccessPoint: !Not [!Equals [!Ref EfsAccessPointId, ""]]
   UsesClusterStrategy: !Equals [!Ref UseClusterCapacityProviderStrategy, "true"]
   ScalesOnMemory: !Not [!Equals [!Ref TargetMemoryUtilization, 0]]
   ScalesOnRequests: !And
@@ -562,6 +592,24 @@ Resources:
                   - ssmmessages:OpenControlChannel
                   - ssmmessages:OpenDataChannel
                 Resource: "*"
+        - !If
+          - HasEfsAccessPoint
+          - PolicyName: efs-client-access
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                # IAM-authorized mount, scoped to this one access point on this
+                # one file system. No ClientRootAccess: the access point pins
+                # the POSIX identity, so root on the volume is never needed.
+                - Effect: Allow
+                  Action:
+                    - elasticfilesystem:ClientMount
+                    - elasticfilesystem:ClientWrite
+                  Resource: !Sub "arn:${AWS::Partition}:elasticfilesystem:${AWS::Region}:${AWS::AccountId}:file-system/${EfsFileSystemId}"
+                  Condition:
+                    StringEquals:
+                      elasticfilesystem:AccessPointArn: !Sub "arn:${AWS::Partition}:elasticfilesystem:${AWS::Region}:${AWS::AccountId}:access-point/${EfsAccessPointId}"
+          - !Ref AWS::NoValue
 
   TaskSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -593,12 +641,32 @@ Resources:
       RuntimePlatform:
         CpuArchitecture: X86_64
         OperatingSystemFamily: LINUX
+      Volumes: !If
+        - HasEfsVolume
+        - - Name: efs-data
+            EFSVolumeConfiguration:
+              FilesystemId: !Ref EfsFileSystemId
+              # Always TLS: data/efs-filesystem's file system policy denies
+              # plaintext clients, and there is no reason to mount without it.
+              TransitEncryption: ENABLED
+              AuthorizationConfig: !If
+                - HasEfsAccessPoint
+                - AccessPointId: !Ref EfsAccessPointId
+                  IAM: ENABLED
+                - !Ref "AWS::NoValue"
+        - !Ref "AWS::NoValue"
       ContainerDefinitions:
         - Name: !Ref ServiceSuffix
           Image: !Ref ImageUri
           Essential: true
           StopTimeout: !Ref StopTimeoutSeconds
           Command: !If [HasCommand, !Ref Command, !Ref "AWS::NoValue"]
+          MountPoints: !If
+            - HasEfsVolume
+            - - SourceVolume: efs-data
+                ContainerPath: !Ref EfsMountPath
+                ReadOnly: false
+            - !Ref "AWS::NoValue"
           PortMappings:
             - Name: !Ref ServiceSuffix
               ContainerPort: !Ref ContainerPort

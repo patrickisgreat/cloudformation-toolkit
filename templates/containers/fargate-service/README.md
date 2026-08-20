@@ -28,6 +28,18 @@ load balancer registration all disappear. What is left is a task running on a
 schedule of its own — a queue consumer, a stream processor, a background worker.
 The same template, one parameter apart.
 
+## Persistent storage is opt-in EFS
+
+Fargate ephemeral storage vanishes with the task. Set `EfsFileSystemId` (from
+[`data/efs-filesystem`](../../data/efs-filesystem)) to mount a persistent
+volume at `EfsMountPath`, and pass `EfsAccessPointId` to mount through an
+access point with IAM authorization — the recommended posture, which also
+grants the task role client access scoped to exactly that access point. The
+mount is always TLS; `data/efs-filesystem`'s file system policy denies
+plaintext clients. Remember to allow the task security group NFS access on the
+file system side (`ClientSecurityGroupId` over there takes
+`TaskSecurityGroupId` from here).
+
 ## Two IAM roles, and why they are not one
 
 | Role | Belongs to | Used for |
@@ -182,6 +194,9 @@ See [`examples/basic`](examples/basic) for a parameter set you can deploy as-is.
 | `ScaleInCooldownSeconds` | Seconds to wait after scaling in before scaling in again. Deliberately longer than the scale-out cooldown: scaling out too eagerly costs money, scaling in too eagerly costs availability. | `Number` | `300` |
 | `LogRetentionDays` | Retention for the container log group.<br>Allowed: `1`, `3`, `5`, `7`, `14`, `30`, `60`, `90`, `120`, `150`, `180`, `365`, `400`, `545`, `731`, `1827`, `3653` | `Number` | `30` |
 | `EnableExecuteCommand` | Allow ECS Exec into running tasks. Sessions are recorded when the cluster has exec logging on.<br>Allowed: `true`, `false` | `String` | `true` |
+| `EfsFileSystemId` | EFS file system to mount into the container (from data/efs-filesystem). Leave empty for no persistent volume — Fargate ephemeral storage vanishes with the task. | `String` | `""` |
+| `EfsAccessPointId` | EFS access point to mount through. When set, the mount authorizes via IAM and the task role is granted client access scoped to this access point — the recommended posture. Requires EfsFileSystemId. | `String` | `""` |
+| `EfsMountPath` | Path inside the container where the EFS volume mounts. | `String` | `/data` |
 | `TaskRoleManagedPolicyArn` | Managed policy granting the application the AWS access it needs - its tables, buckets, queues. Leave empty for a service that calls no AWS APIs. | `String` | `""` |
 
 ### Outputs
