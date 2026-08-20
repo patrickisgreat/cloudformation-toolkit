@@ -1,0 +1,6 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-org" },
+  { "ParameterKey": "UserName", "ParameterValue": "alice" },
+  { "ParameterKey": "Groups", "ParameterValue": "example-org-powerusers" },
+  { "ParameterKey": "EnableConsoleAccess", "ParameterValue": "true" }
+]
