@@ -297,3 +297,52 @@ def test_image_uri_is_required(template) -> None:
         "There must be no default image — a default is how a stack silently "
         "deploys something nobody chose."
     )
+
+
+# EFS volume (optional persistent storage) -------------------------------------
+
+def test_efs_volume_appears_only_with_a_file_system(template) -> None:
+    volumes = template.prop("TaskDefinition", "Volumes")
+    assert volumes["Fn::If"][0] == "HasEfsVolume", (
+        "The volume must be guarded by its toggle — a Fargate task definition "
+        "with an EFS volume for an empty file system id fails to register."
+    )
+    assert volumes["Fn::If"][2] == {"Ref": "AWS::NoValue"}, (
+        "No file system means no Volumes property at all — an empty list is "
+        "accepted but misleads readers into thinking a volume was intended."
+    )
+
+
+def test_efs_mount_is_always_tls(template) -> None:
+    config = template.prop("TaskDefinition", "Volumes")["Fn::If"][1][0]["EFSVolumeConfiguration"]
+    assert config["TransitEncryption"] == "ENABLED", (
+        "data/efs-filesystem's file system policy denies plaintext clients; a "
+        "non-TLS mount would be refused at runtime, not at deploy time."
+    )
+
+
+def test_efs_iam_auth_rides_the_access_point(template) -> None:
+    config = template.prop("TaskDefinition", "Volumes")["Fn::If"][1][0]["EFSVolumeConfiguration"]
+    auth = config["AuthorizationConfig"]
+    assert auth["Fn::If"][0] == "HasEfsAccessPoint"
+    assert auth["Fn::If"][1]["IAM"] == "ENABLED", (
+        "Mounting through an access point without IAM auth silently downgrades "
+        "authorization to network reachability alone."
+    )
+
+
+def test_efs_client_policy_is_scoped_and_conditional(template) -> None:
+    policies = template.prop("TaskRole", "Policies")
+    efs_policy = next(
+        p["Fn::If"] for p in policies
+        if isinstance(p, dict) and p.get("Fn::If", [None])[0] == "HasEfsAccessPoint"
+    )
+    statement = efs_policy[1]["PolicyDocument"]["Statement"][0]
+    assert "elasticfilesystem:ClientRootAccess" not in statement["Action"], (
+        "The access point pins the POSIX identity, so root on the volume is "
+        "never needed — granting it would undo that pinning."
+    )
+    assert "elasticfilesystem:AccessPointArn" in statement["Condition"]["StringEquals"], (
+        "Client access must be conditioned on the one access point, not granted "
+        "to the whole file system."
+    )
