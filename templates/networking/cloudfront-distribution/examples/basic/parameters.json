@@ -1,0 +1,6 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-app" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "OriginDomainName", "ParameterValue": "example-app-assets.s3.us-east-1.amazonaws.com" },
+  { "ParameterKey": "EnableSpaFallback", "ParameterValue": "true" }
+]

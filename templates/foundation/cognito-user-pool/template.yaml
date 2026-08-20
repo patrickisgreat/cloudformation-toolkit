@@ -1,0 +1,267 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >-
+  Cognito user pool with hardened defaults - email sign-in, SRP-only auth, no
+  self-signup unless asked - plus a public app client for SPA and mobile
+  callers and an optional hosted UI domain.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Naming
+        Parameters:
+          - NamePrefix
+          - Environment
+      - Label:
+          default: Sign-in and security
+        Parameters:
+          - AllowSelfSignUp
+          - MfaConfiguration
+          - PasswordMinimumLength
+      - Label:
+          default: App client
+        Parameters:
+          - CallbackUrls
+          - LogoutUrls
+          - AccessTokenValidityMinutes
+          - IdTokenValidityMinutes
+          - RefreshTokenValidityDays
+      - Label:
+          default: Hosted UI
+        Parameters:
+          - HostedUiDomainPrefix
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Description: Prefix for the user pool and app client names.
+    AllowedPattern: "^[a-z][a-z0-9-]{1,30}[a-z0-9]$"
+    ConstraintDescription: 3-32 lowercase characters, digits and hyphens.
+
+  Environment:
+    Type: String
+    Description: Environment this user pool serves.
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+
+  AllowSelfSignUp:
+    Type: String
+    Description: >-
+      Let anyone with an email address register themselves. Off by default: a
+      pool that quietly accepts signups is an open directory anyone can join,
+      which is the right shape for a consumer product and the wrong one for
+      everything else. When off, users are created by an administrator and
+      receive an invitation email.
+    Default: "false"
+    AllowedValues: ["true", "false"]
+
+  MfaConfiguration:
+    Type: String
+    Description: >-
+      OPTIONAL lets each user enroll an authenticator app; ON refuses sign-in
+      without one; OFF disables enrollment entirely and cannot be reversed to ON
+      for existing users without forcing them all through setup. Only TOTP
+      (authenticator apps) is offered - SMS MFA needs an SNS role, costs per
+      message, and is the weaker factor.
+    Default: OPTIONAL
+    # Quoted because bare OFF/ON are YAML booleans, not strings.
+    AllowedValues: ["OFF", OPTIONAL, "ON"]
+
+  PasswordMinimumLength:
+    Type: Number
+    Description: >-
+      Minimum password length. Character-class requirements (upper, lower,
+      digit, symbol) are always on; length is the knob because it is the one
+      that actually adds entropy.
+    Default: 12
+    MinValue: 8
+    MaxValue: 99
+
+  CallbackUrls:
+    Type: String
+    Description: >-
+      Comma-separated redirect URLs for the OAuth code flow, e.g.
+      "https://app.example.com/callback,http://localhost:3000/callback". Cognito
+      requires https except for localhost. Leave empty to skip OAuth entirely -
+      the client then works only with the SDK-based SRP flow.
+    Default: ""
+
+  LogoutUrls:
+    Type: String
+    Description: >-
+      Comma-separated URLs users may be sent to after logout. Only used when
+      CallbackUrls is set.
+    Default: ""
+
+  AccessTokenValidityMinutes:
+    Type: Number
+    Description: >-
+      Access token lifetime. Shorter means a revoked or compromised session dies
+      sooner; longer means fewer refresh round-trips.
+    Default: 60
+    MinValue: 5
+    MaxValue: 1440
+
+  IdTokenValidityMinutes:
+    Type: Number
+    Description: ID token lifetime. Same trade-off as the access token.
+    Default: 60
+    MinValue: 5
+    MaxValue: 1440
+
+  RefreshTokenValidityDays:
+    Type: Number
+    Description: >-
+      How long a session can be silently renewed before the user signs in again.
+      This is the real logout deadline - access tokens just get reissued under
+      it.
+    Default: 30
+    MinValue: 1
+    MaxValue: 3650
+
+  HostedUiDomainPrefix:
+    Type: String
+    Description: >-
+      Prefix for a Cognito-hosted sign-in page at
+      https://<prefix>.auth.<region>.amazoncognito.com. Globally unique across
+      all AWS accounts, so pick something specific. Leave empty for none, which
+      is correct when the application renders its own sign-in form.
+    Default: ""
+    AllowedPattern: "^$|^[a-z0-9][a-z0-9-]{2,62}$"
+    ConstraintDescription: Empty, or 3-63 lowercase characters, digits and hyphens.
+
+Conditions:
+  AllowsSelfSignUp: !Equals [!Ref AllowSelfSignUp, "true"]
+  MfaIsAvailable: !Not [!Equals [!Ref MfaConfiguration, "OFF"]]
+  HasOauthClient: !Not [!Equals [!Ref CallbackUrls, ""]]
+  HasLogoutUrls: !Not [!Equals [!Ref LogoutUrls, ""]]
+  HasHostedUiDomain: !Not [!Equals [!Ref HostedUiDomainPrefix, ""]]
+
+Resources:
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    # A user pool is a directory of real people's accounts. Nothing that can
+    # happen to this stack - rollback, rename, delete - may take it with it.
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      UserPoolName: !Sub "${NamePrefix}-${Environment}"
+      # Retain covers CloudFormation; this covers the console and the CLI.
+      DeletionProtection: ACTIVE
+      UsernameAttributes: [email]
+      UsernameConfiguration:
+        CaseSensitive: false
+      AutoVerifiedAttributes: [email]
+      Schema:
+        - Name: email
+          Required: true
+          Mutable: true
+      # Changing the email address requires proving control of the new one
+      # first; otherwise a hijacked session can silently rebind the account.
+      UserAttributeUpdateSettings:
+        AttributesRequireVerificationBeforeUpdate: [email]
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: !If [AllowsSelfSignUp, false, true]
+      Policies:
+        PasswordPolicy:
+          MinimumLength: !Ref PasswordMinimumLength
+          RequireLowercase: true
+          RequireUppercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          TemporaryPasswordValidityDays: 7
+      MfaConfiguration: !Ref MfaConfiguration
+      EnabledMfas: !If
+        - MfaIsAvailable
+        - [SOFTWARE_TOKEN_MFA]
+        - !Ref AWS::NoValue
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+      EmailConfiguration:
+        # Cognito's built-in sender: zero setup, capped at roughly 50 emails a
+        # day. Fine for dev and small teams; production sign-up volume needs
+        # SES, which this template does not model yet (see the README).
+        EmailSendingAccount: COGNITO_DEFAULT
+
+  WebClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub "${NamePrefix}-${Environment}-web"
+      UserPoolId: !Ref UserPool
+      # A browser or mobile app cannot keep a secret; a client secret in a JS
+      # bundle is published, not protected. Public client + SRP/code flow is
+      # the design, not a compromise.
+      GenerateSecret: false
+      # SRP proves the password without transmitting it. USER_PASSWORD_AUTH
+      # (the password in the request body) is deliberately absent.
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      # "Incorrect username or password" for both, so sign-in errors cannot be
+      # used to enumerate which emails have accounts.
+      PreventUserExistenceErrors: ENABLED
+      EnableTokenRevocation: true
+      SupportedIdentityProviders: [COGNITO]
+      AllowedOAuthFlowsUserPoolClient: !If [HasOauthClient, true, !Ref "AWS::NoValue"]
+      AllowedOAuthFlows: !If
+        - HasOauthClient
+        # Authorization code only. Implicit puts tokens in the URL, where they
+        # land in browser history and server logs.
+        - [code]
+        - !Ref AWS::NoValue
+      AllowedOAuthScopes: !If
+        - HasOauthClient
+        - [openid, email, profile]
+        - !Ref AWS::NoValue
+      CallbackURLs: !If
+        - HasOauthClient
+        - !Split [",", !Ref CallbackUrls]
+        - !Ref AWS::NoValue
+      LogoutURLs: !If
+        - HasLogoutUrls
+        - !Split [",", !Ref LogoutUrls]
+        - !Ref AWS::NoValue
+      AccessTokenValidity: !Ref AccessTokenValidityMinutes
+      IdTokenValidity: !Ref IdTokenValidityMinutes
+      RefreshTokenValidity: !Ref RefreshTokenValidityDays
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
+        RefreshToken: days
+
+  HostedUiDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Condition: HasHostedUiDomain
+    Properties:
+      Domain: !Ref HostedUiDomainPrefix
+      UserPoolId: !Ref UserPool
+
+Outputs:
+  UserPoolId:
+    Description: User pool ID, for SDK configuration and admin API calls.
+    Value: !Ref UserPool
+
+  UserPoolArn:
+    Description: User pool ARN, for an AppSync or API Gateway authorizer.
+    Value: !GetAtt UserPool.Arn
+
+  ProviderUrl:
+    Description: >-
+      OIDC issuer URL (https://cognito-idp.<region>.amazonaws.com/<pool-id>).
+      This is the JwtIssuer parameter of serverless/http-api.
+    Value: !GetAtt UserPool.ProviderURL
+
+  WebClientId:
+    Description: >-
+      App client ID. The `aud` claim in issued tokens - the JwtAudience
+      parameter of serverless/http-api - and the client ID SDKs are configured
+      with.
+    Value: !Ref WebClient
+
+  HostedUiUrl:
+    Description: Base URL of the hosted sign-in page, when a domain was configured.
+    Condition: HasHostedUiDomain
+    Value: !Sub "https://${HostedUiDomainPrefix}.auth.${AWS::Region}.amazoncognito.com"

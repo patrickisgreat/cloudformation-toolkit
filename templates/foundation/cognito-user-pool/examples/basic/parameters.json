@@ -1,0 +1,5 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-app" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "CallbackUrls", "ParameterValue": "http://localhost:3000/callback" }
+]

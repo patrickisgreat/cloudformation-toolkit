@@ -11,23 +11,23 @@ Legend: ✅ done · 🟡 partial · ⬜ not started
 
 ---
 
-## Where this is (2026-08-09)
+## Where this is (2026-08-15)
 
-25 templates and 1 stack on `main`. `cfn-lint` clean, 1,265 offline tests
+27 templates and 1 stack on `main`. `cfn-lint` clean, 1,360 offline tests
 passing, docs and catalog generated and checked in CI.
 
 | Area | State |
 |------|-------|
 | Toolchain (`bin/cfn`, generated docs, generated catalog) | ✅ |
 | Test harness (conventions, security policy, per-template) | ✅ |
-| Foundation — VPC, KMS, secrets, CI identity | ✅ |
+| Foundation — VPC, KMS, secrets, CI identity, Cognito | ✅ |
 | Containers — ECR, cluster, ALB, Fargate service | ✅ |
 | Serverless — Lambda, HTTP API, AppSync | 🟡 no Step Functions or EventBridge |
 | Messaging — SQS, SNS | 🟡 no EventBridge bus/rule |
 | Data — S3, Kinesis, Firehose, Glue, Athena | ✅ for the batch/stream-to-lake path |
 | Databases — DynamoDB, Aurora Serverless v2 | 🟡 no cache, no search |
 | ML — SageMaker endpoint, self-hosted GPU serving | 🟡 no training, no registry |
-| Networking — ACM, Route 53 | 🟡 no CloudFront, no WAF |
+| Networking — ACM, Route 53, CloudFront | 🟡 no WAF |
 | Observability — service alarms | 🟡 no dashboards |
 | CI/CD templates | ⬜ |
 | Stacks | 🟡 one of six |
@@ -61,20 +61,18 @@ reading it:
 - `data-lake-etl` — Kinesis → Firehose → S3 → Glue → Athena, wired
 - `llm-inference` — GPU serving + ALB + model artifact bucket + alarms
 
-Three of these need templates that do not exist yet (CloudFront, Cognito,
-EventBridge), which is the honest reason they are not built.
+CloudFront and Cognito have since landed, which unblocks `static-site` and
+`graphql-api`; EventBridge is the one template still missing.
 
 ### Missing templates, roughly in order of demand
 
 | Template | Unblocks |
 |----------|----------|
-| `networking/cloudfront-distribution` | `static-site`, edge caching for any API |
-| `networking/waf-web-acl` | The hook already exists on `containers/alb` |
+| `networking/waf-web-acl` | Hooks already exist on `containers/alb` and `networking/cloudfront-distribution` |
 | `messaging/eventbridge-rule` | Scheduled jobs, event-driven ETL, S3 → Lambda without coupling |
 | `serverless/step-functions` | Orchestrated ETL and long-running workflows |
 | `database/elasticache-redis` | Sessions, caching, rate limiting |
 | `cicd/codepipeline-ecs` | Build and deploy without GitHub Actions |
-| `foundation/cognito-user-pool` | `graphql-api`, and auth for mobile and SPA clients |
 | `ml/model-registry` | Versioned model artifacts with promotion between environments |
 
 ---

@@ -49,6 +49,7 @@ together; none define resources inline.
 
 | Template | Status | Description |
 |----------|--------|-------------|
+| [`foundation/cognito-user-pool`](templates/foundation/cognito-user-pool) | **beta** | Cognito user pool with hardened defaults, a public SPA app client, and an optional hosted UI domain |
 | [`foundation/github-oidc-role`](templates/foundation/github-oidc-role) | stable | GitHub Actions OIDC deploy role scoped to one repo and ref, no long-lived keys |
 | [`foundation/kms-key`](templates/foundation/kms-key) | stable | Customer-managed KMS key with rotation, alias, and a composed key policy |
 | [`foundation/secret`](templates/foundation/secret) | stable | Secrets Manager secret, generated at create time, with optional CMK and replication |
@@ -107,6 +108,7 @@ together; none define resources inline.
 | Template | Status | Description |
 |----------|--------|-------------|
 | [`networking/acm-certificate`](templates/networking/acm-certificate) | stable | DNS-validated ACM certificate with optional wildcard and extra SAN |
+| [`networking/cloudfront-distribution`](templates/networking/cloudfront-distribution) | stable | CloudFront distribution for a private S3 origin (OAC) or an HTTPS custom origin, with SPA and WAF hooks |
 | [`networking/dns-records`](templates/networking/dns-records) | stable | Route 53 alias or plain record with an optional health check |
 
 #### Observability — alarms, dashboards
