@@ -1,0 +1,211 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >-
+  Standard IAM group tiers - admins, powerusers, readonly - plus an optional
+  custom group, with a deny-without-MFA policy attached to every created group
+  by default. Membership comes from foundation/iam-user stacks.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Naming
+        Parameters:
+          - NamePrefix
+      - Label:
+          default: Which tiers to create
+        Parameters:
+          - CreateAdminGroup
+          - CreatePowerUserGroup
+          - CreateReadOnlyGroup
+      - Label:
+          default: Custom group
+        Parameters:
+          - CustomGroupSuffix
+          - CustomGroupManagedPolicyArns
+      - Label:
+          default: MFA
+        Parameters:
+          - EnforceMfa
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Description: Prefix for every group name.
+    AllowedPattern: "^[a-z][a-z0-9-]{1,30}[a-z0-9]$"
+    ConstraintDescription: 3-32 lowercase characters, digits and hyphens.
+
+  CreateAdminGroup:
+    Type: String
+    Description: >-
+      Create <NamePrefix>-admins with AWS-managed AdministratorAccess. The
+      group is inert until an iam-user stack joins it, but not creating it at
+      all is the stronger position in an account where nobody should hold
+      standing admin.
+    Default: "true"
+    AllowedValues: ["true", "false"]
+
+  CreatePowerUserGroup:
+    Type: String
+    Description: >-
+      Create <NamePrefix>-powerusers with AWS-managed PowerUserAccess -
+      everything except IAM, Organizations, and account management. The right
+      tier for most engineers.
+    Default: "true"
+    AllowedValues: ["true", "false"]
+
+  CreateReadOnlyGroup:
+    Type: String
+    Description: Create <NamePrefix>-readonly with AWS-managed ReadOnlyAccess.
+    Default: "true"
+    AllowedValues: ["true", "false"]
+
+  CustomGroupSuffix:
+    Type: String
+    Description: >-
+      Name suffix for the custom group, e.g. "billing" or "deployers". Only
+      used when CustomGroupManagedPolicyArns is set.
+    Default: custom
+    AllowedPattern: "^[a-z][a-z0-9-]{0,40}[a-z0-9]$"
+
+  CustomGroupManagedPolicyArns:
+    Type: String
+    Description: >-
+      Comma-separated managed policy ARNs for a fourth, custom group
+      <NamePrefix>-<CustomGroupSuffix>. Leave empty to not create one. For
+      permissions no managed policy expresses, create the policy with
+      foundation/iam-role's pattern or the console, then list its ARN here.
+    Default: ""
+
+  EnforceMfa:
+    Type: String
+    Description: >-
+      Attach a policy to every created group that denies everything except
+      MFA self-enrolment until the user has authenticated with MFA. Turning
+      this off means a phished password is the whole game. See the README for
+      the one surprise: brand-new users must enrol an MFA device before they
+      can do anything else.
+    Default: "true"
+    AllowedValues: ["true", "false"]
+
+Conditions:
+  HasAdminGroup: !Equals [!Ref CreateAdminGroup, "true"]
+  HasPowerUserGroup: !Equals [!Ref CreatePowerUserGroup, "true"]
+  HasReadOnlyGroup: !Equals [!Ref CreateReadOnlyGroup, "true"]
+  HasCustomGroup: !Not [!Equals [!Ref CustomGroupManagedPolicyArns, ""]]
+  ShouldEnforceMfa: !Equals [!Ref EnforceMfa, "true"]
+
+Resources:
+  AdminGroup:
+    Type: AWS::IAM::Group
+    Condition: HasAdminGroup
+    Properties:
+      GroupName: !Sub "${NamePrefix}-admins"
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/AdministratorAccess"
+
+  PowerUserGroup:
+    Type: AWS::IAM::Group
+    Condition: HasPowerUserGroup
+    Properties:
+      GroupName: !Sub "${NamePrefix}-powerusers"
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/PowerUserAccess"
+
+  ReadOnlyGroup:
+    Type: AWS::IAM::Group
+    Condition: HasReadOnlyGroup
+    Properties:
+      GroupName: !Sub "${NamePrefix}-readonly"
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/ReadOnlyAccess"
+
+  CustomGroup:
+    Type: AWS::IAM::Group
+    Condition: HasCustomGroup
+    Properties:
+      GroupName: !Sub "${NamePrefix}-${CustomGroupSuffix}"
+      ManagedPolicyArns: !Split [",", !Ref CustomGroupManagedPolicyArns]
+
+  # AWS's documented "self-service MFA" policy. The Allow statements let a
+  # user see and enrol their own MFA device; the Deny blocks everything else
+  # until aws:MultiFactorAuthPresent is true. Deactivating or deleting an MFA
+  # device is deliberately NOT in the NotAction list - stolen access keys must
+  # not be enough to remove the second factor.
+  MfaEnforcementPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Condition: ShouldEnforceMfa
+    Properties:
+      ManagedPolicyName: !Sub "${NamePrefix}-enforce-mfa"
+      Description: >-
+        Denies all actions except MFA self-enrolment when the session has no
+        MFA. Attached to every group iam-groups creates.
+      Groups:
+        - !If [HasAdminGroup, !Ref AdminGroup, !Ref "AWS::NoValue"]
+        - !If [HasPowerUserGroup, !Ref PowerUserGroup, !Ref "AWS::NoValue"]
+        - !If [HasReadOnlyGroup, !Ref ReadOnlyGroup, !Ref "AWS::NoValue"]
+        - !If [HasCustomGroup, !Ref CustomGroup, !Ref "AWS::NoValue"]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowViewAccountInfo
+            Effect: Allow
+            Action:
+              - iam:GetAccountPasswordPolicy
+              - iam:ListVirtualMFADevices
+            Resource: "*"
+          - Sid: AllowManageOwnVirtualMFADevice
+            Effect: Allow
+            Action:
+              - iam:CreateVirtualMFADevice
+            Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:mfa/${!aws:username}"
+          - Sid: AllowManageOwnUserMFA
+            Effect: Allow
+            Action:
+              - iam:EnableMFADevice
+              - iam:GetUser
+              - iam:ListMFADevices
+              - iam:ResyncMFADevice
+            Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:user/${!aws:username}"
+          - Sid: DenyAllExceptListedIfNoMFA
+            Effect: Deny
+            NotAction:
+              - iam:CreateVirtualMFADevice
+              - iam:EnableMFADevice
+              - iam:GetUser
+              - iam:ListMFADevices
+              - iam:ListVirtualMFADevices
+              - iam:ResyncMFADevice
+              - sts:GetSessionToken
+            Resource: "*"
+            Condition:
+              BoolIfExists:
+                aws:MultiFactorAuthPresent: "false"
+
+Outputs:
+  AdminGroupName:
+    Description: Admin group name, for an iam-user stack's Groups parameter.
+    Condition: HasAdminGroup
+    Value: !Ref AdminGroup
+
+  PowerUserGroupName:
+    Description: Poweruser group name, for an iam-user stack's Groups parameter.
+    Condition: HasPowerUserGroup
+    Value: !Ref PowerUserGroup
+
+  ReadOnlyGroupName:
+    Description: Read-only group name, for an iam-user stack's Groups parameter.
+    Condition: HasReadOnlyGroup
+    Value: !Ref ReadOnlyGroup
+
+  CustomGroupName:
+    Description: Custom group name, when one was created.
+    Condition: HasCustomGroup
+    Value: !Ref CustomGroup
+
+  MfaEnforcementPolicyArn:
+    Description: >-
+      ARN of the enforce-mfa policy, to attach to groups or users created
+      outside this stack.
+    Condition: ShouldEnforceMfa
+    Value: !Ref MfaEnforcementPolicy
