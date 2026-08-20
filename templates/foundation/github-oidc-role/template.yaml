@@ -24,6 +24,7 @@ Metadata:
           default: What the role may do
         Parameters:
           - ManagedPolicyArn
+          - ManagedPolicyArn2
           - GrantCloudFormationDeploy
           - ArtifactsBucketArn
           - PermissionsBoundaryArn
@@ -95,6 +96,15 @@ Parameters:
       built-in CloudFormation deploy permissions below.
     Default: ""
 
+  ManagedPolicyArn2:
+    Type: String
+    Description: >-
+      Second managed policy to attach. The common pairing is PowerUserAccess in
+      the first slot plus IAMFullAccess here, because PowerUserAccess
+      deliberately excludes IAM and a deploy role that creates service/task
+      roles needs it. Leave empty when one policy is enough.
+    Default: ""
+
   GrantCloudFormationDeploy:
     Type: String
     Description: >-
@@ -148,6 +158,7 @@ Conditions:
   HasEnvironmentScope: !Not [!Equals [!Ref AllowedEnvironment, ""]]
   ShouldAllowPullRequests: !Equals [!Ref AllowPullRequests, "true"]
   HasManagedPolicy: !Not [!Equals [!Ref ManagedPolicyArn, ""]]
+  HasManagedPolicy2: !Not [!Equals [!Ref ManagedPolicyArn2, ""]]
   ShouldGrantDeploy: !Equals [!Ref GrantCloudFormationDeploy, "true"]
   HasArtifactsBucket: !Not [!Equals [!Ref ArtifactsBucketArn, ""]]
   HasPermissionsBoundary: !Not [!Equals [!Ref PermissionsBoundaryArn, ""]]
@@ -206,6 +217,7 @@ Resources:
                     - !Ref AWS::NoValue
       ManagedPolicyArns:
         - !If [HasManagedPolicy, !Ref ManagedPolicyArn, !Ref "AWS::NoValue"]
+        - !If [HasManagedPolicy2, !Ref ManagedPolicyArn2, !Ref "AWS::NoValue"]
       Policies:
         - !If
           - ShouldGrantDeploy
