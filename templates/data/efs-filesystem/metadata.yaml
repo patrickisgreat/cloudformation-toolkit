@@ -1,0 +1,3 @@
+group: data
+status: stable
+summary: Encrypted EFS with mount targets, TLS-only policy, IA lifecycle, and a POSIX access point

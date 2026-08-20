@@ -1,0 +1,276 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >-
+  Encrypted EFS file system with per-subnet mount targets, a TLS-enforcing file
+  system policy, lifecycle transition to IA, and an optional POSIX access point
+  for container workloads.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Naming
+        Parameters:
+          - NamePrefix
+          - Environment
+      - Label:
+          default: Network
+        Parameters:
+          - VpcId
+          - SubnetId1
+          - SubnetId2
+          - SubnetId3
+          - ClientSecurityGroupId
+      - Label:
+          default: File system
+        Parameters:
+          - PerformanceMode
+          - ThroughputMode
+          - TransitionToIA
+          - KmsKeyArn
+          - EnableAutomaticBackups
+      - Label:
+          default: Access point
+        Parameters:
+          - CreateAccessPoint
+          - AccessPointPath
+          - PosixUid
+          - PosixGid
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Description: >-
+      Prefix for every resource this stack names. Must be unique per account and
+      region, since physical names collide across stacks.
+    AllowedPattern: "^[a-z][a-z0-9-]{1,30}[a-z0-9]$"
+    ConstraintDescription: >-
+      3-32 characters, lowercase letters, digits and hyphens, starting with a
+      letter and ending with a letter or digit.
+
+  Environment:
+    Type: String
+    Description: Environment this stack belongs to. Used in names and tags.
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC the mount targets and their security group live in.
+
+  SubnetId1:
+    Type: AWS::EC2::Subnet::Id
+    Description: >-
+      Subnet for the first mount target. One mount target per AZ is enough —
+      every client in that AZ mounts through it.
+
+  SubnetId2:
+    Type: String
+    Description: >-
+      Subnet for a second mount target, in a different AZ than the first. Leave
+      empty for a single-AZ posture; a client task in an AZ with no mount target
+      pays cross-AZ data charges and latency.
+    Default: ""
+
+  SubnetId3:
+    Type: String
+    Description: Subnet for a third mount target. Leave empty when two AZs suffice.
+    Default: ""
+
+  ClientSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: >-
+      Security group of the clients (ECS service, EC2 instances) allowed to
+      mount this file system. NFS ingress is granted to this group and nothing
+      else.
+
+  PerformanceMode:
+    Type: String
+    Description: >-
+      generalPurpose fits almost everything. maxIO trades per-operation latency
+      for aggregate throughput and cannot be changed after creation.
+    Default: generalPurpose
+    AllowedValues: [generalPurpose, maxIO]
+
+  ThroughputMode:
+    Type: String
+    Description: >-
+      bursting is included in the storage price. elastic bills per GB
+      transferred and suits spiky workloads that overrun their burst credits;
+      watch the metered rates before choosing it.
+    Default: bursting
+    AllowedValues: [bursting, elastic]
+
+  TransitionToIA:
+    Type: String
+    Description: >-
+      Move files not read for this many days to Infrequent Access storage,
+      roughly a tenth of the standard price. NONE disables the transition.
+    Default: AFTER_30_DAYS
+    AllowedValues: [NONE, AFTER_7_DAYS, AFTER_14_DAYS, AFTER_30_DAYS, AFTER_60_DAYS, AFTER_90_DAYS]
+
+  KmsKeyArn:
+    Type: String
+    Description: >-
+      Customer-managed KMS key for encryption at rest. Leave empty to use the
+      AWS-managed EFS key; encryption itself is always on.
+    Default: ""
+
+  EnableAutomaticBackups:
+    Type: String
+    Description: >-
+      Enroll the file system in AWS Backup's default plan. Backup storage bills
+      monthly, so this defaults off; turn it on when the data is not
+      reproducible.
+    Default: "false"
+    AllowedValues: ["true", "false"]
+
+  CreateAccessPoint:
+    Type: String
+    Description: >-
+      Create a POSIX access point that owns its directory and pins the client
+      identity. Access points are free and are how ECS tasks should mount EFS;
+      turn this off only when clients manage users and paths themselves.
+    Default: "true"
+    AllowedValues: ["true", "false"]
+
+  AccessPointPath:
+    Type: String
+    Description: >-
+      Directory the access point exposes as its root. Created on first mount,
+      owned by the POSIX identity below.
+    Default: /data
+    AllowedPattern: "^/[a-zA-Z0-9-_/]*$"
+
+  PosixUid:
+    Type: Number
+    Description: POSIX user id the access point enforces on every client.
+    Default: 1000
+
+  PosixGid:
+    Type: Number
+    Description: POSIX group id the access point enforces on every client.
+    Default: 1000
+
+Conditions:
+  HasMountTarget2: !Not [!Equals [!Ref SubnetId2, ""]]
+  HasMountTarget3: !Not [!Equals [!Ref SubnetId3, ""]]
+  HasCustomKey: !Not [!Equals [!Ref KmsKeyArn, ""]]
+  HasIaTransition: !Not [!Equals [!Ref TransitionToIA, "NONE"]]
+  ShouldEnableBackups: !Equals [!Ref EnableAutomaticBackups, "true"]
+  ShouldCreateAccessPoint: !Equals [!Ref CreateAccessPoint, "true"]
+
+Resources:
+  MountTargetSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "NFS access to ${NamePrefix} EFS (${Environment})"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          SourceSecurityGroupId: !Ref ClientSecurityGroupId
+          Description: NFS from the client security group
+
+  FileSystem:
+    Type: AWS::EFS::FileSystem
+    # The file system is the data. A failed rollback must never delete it.
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Encrypted: true
+      KmsKeyId: !If [HasCustomKey, !Ref KmsKeyArn, !Ref "AWS::NoValue"]
+      PerformanceMode: !Ref PerformanceMode
+      ThroughputMode: !Ref ThroughputMode
+      BackupPolicy:
+        Status: !If [ShouldEnableBackups, ENABLED, DISABLED]
+      LifecyclePolicies:
+        !If
+          - HasIaTransition
+          - - TransitionToIA: !Ref TransitionToIA
+          - !Ref "AWS::NoValue"
+      # Deny any client that connects without TLS. ECS volume configurations
+      # set TransitEncryption: ENABLED, which satisfies this.
+      FileSystemPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+      FileSystemTags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-efs"
+
+  MountTarget1:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref FileSystem
+      SubnetId: !Ref SubnetId1
+      SecurityGroups:
+        - !Ref MountTargetSecurityGroup
+
+  MountTarget2:
+    Type: AWS::EFS::MountTarget
+    Condition: HasMountTarget2
+    Properties:
+      FileSystemId: !Ref FileSystem
+      SubnetId: !Ref SubnetId2
+      SecurityGroups:
+        - !Ref MountTargetSecurityGroup
+
+  MountTarget3:
+    Type: AWS::EFS::MountTarget
+    Condition: HasMountTarget3
+    Properties:
+      FileSystemId: !Ref FileSystem
+      SubnetId: !Ref SubnetId3
+      SecurityGroups:
+        - !Ref MountTargetSecurityGroup
+
+  AccessPoint:
+    Type: AWS::EFS::AccessPoint
+    Condition: ShouldCreateAccessPoint
+    Properties:
+      FileSystemId: !Ref FileSystem
+      PosixUser:
+        Uid: !Ref PosixUid
+        Gid: !Ref PosixGid
+      RootDirectory:
+        Path: !Ref AccessPointPath
+        CreationInfo:
+          OwnerUid: !Ref PosixUid
+          OwnerGid: !Ref PosixGid
+          Permissions: "0755"
+      AccessPointTags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-efs-ap"
+
+Outputs:
+  FileSystemId:
+    Description: EFS file system id, for volume configurations and mount commands.
+    Value: !Ref FileSystem
+
+  FileSystemArn:
+    Description: EFS file system ARN, for IAM policies granting client access.
+    Value: !GetAtt FileSystem.Arn
+
+  MountTargetSecurityGroupId:
+    Description: >-
+      Security group attached to the mount targets. Extend it when a second
+      client group needs NFS access.
+    Value: !Ref MountTargetSecurityGroup
+
+  AccessPointId:
+    Description: Access point id, for ECS volume configurations.
+    Condition: ShouldCreateAccessPoint
+    Value: !Ref AccessPoint
+
+  AccessPointArn:
+    Description: Access point ARN, for IAM policies conditioned on the access point.
+    Condition: ShouldCreateAccessPoint
+    Value: !GetAtt AccessPoint.Arn
