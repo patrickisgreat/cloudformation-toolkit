@@ -112,3 +112,18 @@ def test_oidc_provider_can_be_reused(template) -> None:
 def test_role_arn_is_exposed_for_the_workflow(template) -> None:
     assert template.outputs["RoleArn"]["Value"] == {"Fn::GetAtt": ["Role", "Arn"]}
     assert template.outputs["OidcProviderArn"].get("Condition") == "ShouldCreateOidcProvider"
+
+
+def test_second_managed_policy_slot_is_conditional(template) -> None:
+    arns = template.prop("Role", "ManagedPolicyArns")
+    assert arns[1] == {
+        "Fn::If": ["HasManagedPolicy2", {"Ref": "ManagedPolicyArn2"}, {"Ref": "AWS::NoValue"}]
+    }, (
+        "The second policy slot must vanish when empty — an empty string in "
+        "ManagedPolicyArns fails role creation. The slot exists because "
+        "PowerUserAccess excludes IAM, and a deploy role that creates service "
+        "roles needs an IAM policy alongside it."
+    )
+    assert template.default("ManagedPolicyArn2") == "", (
+        "No default policy: extra permissions must always be an explicit choice."
+    )
