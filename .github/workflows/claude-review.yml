@@ -25,11 +25,28 @@ jobs:
       id-token: write
       actions: read
     steps:
+      # Secrets are not readable in a job-level `if`, so gate the steps on a
+      # step output instead. Without the key the job succeeds as a visible
+      # skip rather than failing every PR until the secret is configured.
+      - name: Check for an API key
+        id: key
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::ANTHROPIC_API_KEY secret is not set - skipping Claude Code review. Add it with: gh secret set ANTHROPIC_API_KEY"
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.key.outputs.present == 'true'
         with:
           fetch-depth: 1
 
       - name: Review the pull request
+        if: steps.key.outputs.present == 'true'
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
