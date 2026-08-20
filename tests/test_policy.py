@@ -146,6 +146,9 @@ def stateful_deletion_policy(t: Template) -> list[Finding]:
         "AWS::DocDB::DBCluster",
         "AWS::Redshift::Cluster",
         "AWS::KMS::Key",
+        # The outermost container of state there is: "deleting" a member
+        # account starts closing it, data and all.
+        "AWS::Organizations::Account",
     )
     findings = []
     for rid, resource in t.of_type(*stateful).items():

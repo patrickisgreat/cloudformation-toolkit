@@ -1,0 +1,95 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >-
+  IAM Access Analyzer: the free external-access analyzer that flags resources
+  shared outside the account or organization, plus an opt-in (paid) unused
+  access analyzer that flags permissions nobody has used.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Naming
+        Parameters:
+          - NamePrefix
+      - Label:
+          default: Scope
+        Parameters:
+          - AnalyzerScope
+      - Label:
+          default: Unused access (paid)
+        Parameters:
+          - EnableUnusedAccessAnalyzer
+          - UnusedAccessAgeDays
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Description: Prefix for the analyzer names.
+    AllowedPattern: "^[a-z][a-z0-9-]{1,30}[a-z0-9]$"
+    ConstraintDescription: 3-32 lowercase characters, digits and hyphens.
+
+  AnalyzerScope:
+    Type: String
+    Description: >-
+      "account" analyzes this account; "organization" analyzes every member
+      account, and only works from the management account or a delegated
+      Access Analyzer administrator. If you vend accounts with
+      foundation/org-account, one organization-scoped analyzer beats one
+      stack per account.
+    Default: account
+    AllowedValues: [account, organization]
+
+  EnableUnusedAccessAnalyzer:
+    Type: String
+    Description: >-
+      Also create an unused-access analyzer, which flags roles, keys, and
+      permissions nobody has exercised. Off by default because it is the paid
+      half: roughly $0.20 per IAM role or user analyzed per month.
+    Default: "false"
+    AllowedValues: ["true", "false"]
+
+  UnusedAccessAgeDays:
+    Type: Number
+    Description: >-
+      Days without use before access counts as unused. 90 tracks the common
+      compliance definition; shorter is noisier, not stricter.
+    Default: 90
+    MinValue: 1
+    MaxValue: 365
+
+Conditions:
+  IsOrganizationScope: !Equals [!Ref AnalyzerScope, "organization"]
+  HasUnusedAccessAnalyzer: !Equals [!Ref EnableUnusedAccessAnalyzer, "true"]
+
+Resources:
+  Analyzer:
+    Type: AWS::AccessAnalyzer::Analyzer
+    Properties:
+      AnalyzerName: !Sub "${NamePrefix}-external-access"
+      Type: !If [IsOrganizationScope, ORGANIZATION, ACCOUNT]
+
+  UnusedAccessAnalyzer:
+    Type: AWS::AccessAnalyzer::Analyzer
+    Condition: HasUnusedAccessAnalyzer
+    Properties:
+      AnalyzerName: !Sub "${NamePrefix}-unused-access"
+      Type: !If
+        - IsOrganizationScope
+        - ORGANIZATION_UNUSED_ACCESS
+        - ACCOUNT_UNUSED_ACCESS
+      AnalyzerConfiguration:
+        UnusedAccessConfiguration:
+          UnusedAccessAge: !Ref UnusedAccessAgeDays
+
+Outputs:
+  AnalyzerArn:
+    Description: >-
+      External-access analyzer ARN, for archive rules and for
+      access-analyzer:* IAM policy resource patterns.
+    Value: !GetAtt Analyzer.Arn
+
+  UnusedAccessAnalyzerArn:
+    Description: Unused-access analyzer ARN, when one was created.
+    Condition: HasUnusedAccessAnalyzer
+    Value: !GetAtt UnusedAccessAnalyzer.Arn

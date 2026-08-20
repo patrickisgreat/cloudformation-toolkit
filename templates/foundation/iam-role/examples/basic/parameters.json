@@ -1,0 +1,8 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-app" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" },
+  { "ParameterKey": "RoleSuffix", "ParameterValue": "cfn-exec" },
+  { "ParameterKey": "ServicePrincipal", "ParameterValue": "cloudformation.amazonaws.com" },
+  { "ParameterKey": "ManagedPolicyArns", "ParameterValue": "arn:aws:iam::aws:policy/PowerUserAccess" },
+  { "ParameterKey": "RequireMfa", "ParameterValue": "false" }
+]

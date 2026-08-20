@@ -1,0 +1,257 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >-
+  General-purpose IAM role: trusted by an AWS service, by other AWS principals
+  (cross-account, with optional ExternalId and MFA), or both. Permissions come
+  from managed policy ARNs plus an optional raw inline policy document.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Naming
+        Parameters:
+          - NamePrefix
+          - Environment
+          - RoleSuffix
+          - RoleDescription
+      - Label:
+          default: Who may assume this role
+        Parameters:
+          - ServicePrincipal
+          - TrustedPrincipalArns
+          - ExternalId
+          - RequireMfa
+      - Label:
+          default: What the role may do
+        Parameters:
+          - ManagedPolicyArns
+          - InlinePolicyJson
+          - PermissionsBoundaryArn
+      - Label:
+          default: Session and EC2
+        Parameters:
+          - MaxSessionDurationSeconds
+          - CreateInstanceProfile
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Description: Prefix for the role name.
+    AllowedPattern: "^[a-z][a-z0-9-]{1,30}[a-z0-9]$"
+    ConstraintDescription: 3-32 lowercase characters, digits and hyphens.
+
+  Environment:
+    Type: String
+    Description: Environment this role belongs to.
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+
+  RoleSuffix:
+    Type: String
+    Description: >-
+      Suffix identifying what this role is for. The full name becomes
+      <NamePrefix>-<RoleSuffix>, e.g. checkout-api-task or myapp-cfn-exec.
+    Default: role
+    AllowedPattern: "^[a-z][a-z0-9-]{0,40}[a-z0-9]$"
+
+  RoleDescription:
+    Type: String
+    Description: >-
+      What this role is for and who assumes it. Worth writing - the console
+      shows it in the role list, and it is what stops someone deleting a role
+      they do not recognise.
+    Default: Managed by cloudformation-toolkit.
+
+  ServicePrincipal:
+    Type: String
+    Description: >-
+      AWS service that may assume this role, e.g. ecs-tasks.amazonaws.com,
+      lambda.amazonaws.com, or cloudformation.amazonaws.com for a deployment
+      execution role. Leave empty for none. At least one of ServicePrincipal
+      and TrustedPrincipalArns must be set.
+    Default: ""
+    AllowedPattern: "^$|^[a-z0-9.-]+\\.amazonaws\\.com$"
+
+  TrustedPrincipalArns:
+    Type: String
+    Description: >-
+      Comma-separated IAM principal ARNs (roles, users, or account root ARNs)
+      that may assume this role. This is the cross-account knob: put the other
+      account's role ARN here. Leave empty for none.
+    Default: ""
+
+  ExternalId:
+    Type: String
+    Description: >-
+      sts:ExternalId the trusted principals must present, the standard defence
+      against the confused-deputy problem when a third party assumes this role.
+      Only applies to TrustedPrincipalArns. Leave empty to skip.
+    Default: ""
+    AllowedPattern: "^$|^[A-Za-z0-9+=,.@:/_-]{2,1224}$"
+
+  RequireMfa:
+    Type: String
+    Description: >-
+      Require aws:MultiFactorAuthPresent on the TrustedPrincipalArns trust
+      statement. The right default for humans assuming a role from another
+      account - but it blocks role-to-role chaining and service credentials,
+      which never carry MFA. Set to false when the trusted principal is a
+      role a machine assumes. Does not apply to ServicePrincipal.
+    Default: "true"
+    AllowedValues: ["true", "false"]
+
+  ManagedPolicyArns:
+    Type: String
+    Description: >-
+      Comma-separated managed policy ARNs to attach, e.g.
+      arn:aws:iam::aws:policy/ReadOnlyAccess. Up to 10 (the IAM quota
+      is 10 without a support request). Leave empty for none.
+    Default: ""
+
+  InlinePolicyJson:
+    Type: String
+    Description: >-
+      Raw IAM policy document (JSON) attached as an inline policy - the escape
+      hatch for permissions no managed policy expresses. Stack parameters cap
+      at 4096 characters; a policy bigger than that should become a customer
+      managed policy attached via ManagedPolicyArns instead. Leave empty for
+      none.
+    Default: ""
+
+  PermissionsBoundaryArn:
+    Type: String
+    Description: >-
+      Optional permissions boundary. In an organisation that uses boundaries,
+      omitting one here is usually what makes the role creation fail.
+    Default: ""
+
+  MaxSessionDurationSeconds:
+    Type: Number
+    Description: >-
+      Maximum session length. One hour is right for almost everything; raise it
+      only when a single session genuinely runs longer, since a leaked
+      credential lives this long.
+    Default: 3600
+    MinValue: 900
+    MaxValue: 43200
+
+  CreateInstanceProfile:
+    Type: String
+    Description: >-
+      Wrap the role in an instance profile so EC2 instances can carry it. Only
+      makes sense with ServicePrincipal ec2.amazonaws.com.
+    Default: "false"
+    AllowedValues: ["true", "false"]
+
+Rules:
+  # Fails the deploy up front with a readable message, instead of IAM
+  # rejecting an empty trust policy fifteen minutes into a stack create.
+  SomeoneMustBeTrusted:
+    Assertions:
+      - Assert: !Not
+          - !And
+            - !Equals [!Ref ServicePrincipal, ""]
+            - !Equals [!Ref TrustedPrincipalArns, ""]
+        AssertDescription: >-
+          Set at least one of ServicePrincipal and TrustedPrincipalArns - a
+          role nobody can assume cannot be created.
+
+Conditions:
+  HasServicePrincipal: !Not [!Equals [!Ref ServicePrincipal, ""]]
+  HasTrustedPrincipals: !Not [!Equals [!Ref TrustedPrincipalArns, ""]]
+  HasExternalId: !Not [!Equals [!Ref ExternalId, ""]]
+  RequiresMfa: !Equals [!Ref RequireMfa, "true"]
+  HasExternalIdAndMfa: !And [!Condition HasExternalId, !Condition RequiresMfa]
+  HasManagedPolicies: !Not [!Equals [!Ref ManagedPolicyArns, ""]]
+  HasInlinePolicy: !Not [!Equals [!Ref InlinePolicyJson, ""]]
+  HasPermissionsBoundary: !Not [!Equals [!Ref PermissionsBoundaryArn, ""]]
+  ShouldCreateInstanceProfile: !Equals [!Ref CreateInstanceProfile, "true"]
+
+Resources:
+  Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-${RoleSuffix}"
+      Description: !Sub "${RoleDescription} (${Environment})"
+      MaxSessionDuration: !Ref MaxSessionDurationSeconds
+      PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref "AWS::NoValue"]
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - !If
+            - HasServicePrincipal
+            - Effect: Allow
+              Principal:
+                Service: !Ref ServicePrincipal
+              Action: sts:AssumeRole
+            - !Ref AWS::NoValue
+          - !If
+            - HasTrustedPrincipals
+            - Effect: Allow
+              Principal:
+                AWS: !Split [",", !Ref TrustedPrincipalArns]
+              Action: sts:AssumeRole
+              # Fn::If cannot add or remove a map key, so each combination of
+              # ExternalId x MFA swaps in the whole Condition map it needs.
+              Condition: !If
+                - HasExternalIdAndMfa
+                - StringEquals:
+                    sts:ExternalId: !Ref ExternalId
+                  Bool:
+                    aws:MultiFactorAuthPresent: "true"
+                - !If
+                  - HasExternalId
+                  - StringEquals:
+                      sts:ExternalId: !Ref ExternalId
+                  - !If
+                    - RequiresMfa
+                    - Bool:
+                        aws:MultiFactorAuthPresent: "true"
+                    - !Ref AWS::NoValue
+            - !Ref AWS::NoValue
+      ManagedPolicyArns: !If
+        - HasManagedPolicies
+        - !Split [",", !Ref ManagedPolicyArns]
+        - !Ref AWS::NoValue
+      Policies:
+        - !If
+          - HasInlinePolicy
+          - PolicyName: inline
+            PolicyDocument: !Ref InlinePolicyJson
+          - !Ref AWS::NoValue
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Condition: ShouldCreateInstanceProfile
+    Properties:
+      InstanceProfileName: !Sub "${NamePrefix}-${RoleSuffix}"
+      Roles:
+        - !Ref Role
+
+Outputs:
+  RoleArn:
+    Description: >-
+      Role ARN - what a trust policy, a resource policy, or an
+      aws sts assume-role call takes.
+    Value: !GetAtt Role.Arn
+
+  RoleName:
+    Description: Role name, for IAM policy resource patterns and the CLI.
+    Value: !Ref Role
+
+  RoleId:
+    Description: >-
+      Stable unique ID (AROA...). Use it in S3 bucket policies that must keep
+      working if the role is ever deleted and recreated with the same name.
+    Value: !GetAtt Role.RoleId
+
+  InstanceProfileArn:
+    Description: Instance profile ARN, for an EC2 launch template's IamInstanceProfile.
+    Condition: ShouldCreateInstanceProfile
+    Value: !GetAtt InstanceProfile.Arn
+
+  InstanceProfileName:
+    Description: Instance profile name, when this stack created one.
+    Condition: ShouldCreateInstanceProfile
+    Value: !Ref InstanceProfile

@@ -1,0 +1,106 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >-
+  A member account in the AWS Organization: created, placed in an OU, and
+  reachable through the standard cross-account access role. Deploy from the
+  management account only. The account is retained on stack delete - closing
+  an account is a human decision with a 90-day fuse, not a rollback side
+  effect.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Identity
+        Parameters:
+          - NamePrefix
+          - AccountSuffix
+          - Email
+      - Label:
+          default: Placement and access
+        Parameters:
+          - ParentOuId
+          - AccessRoleName
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Description: Prefix for the account name, normally the org name.
+    AllowedPattern: "^[a-z][a-z0-9-]{1,30}[a-z0-9]$"
+    ConstraintDescription: 3-32 lowercase characters, digits and hyphens.
+
+  AccountSuffix:
+    Type: String
+    Description: >-
+      What this account is for. The account name becomes
+      <NamePrefix>-<AccountSuffix>, e.g. example-org-dev or
+      example-org-workloads-prod. One account per environment is the model
+      this library's environments/ directory assumes.
+    AllowedPattern: "^[a-z][a-z0-9-]{0,40}[a-z0-9]$"
+
+  Email:
+    Type: String
+    Description: >-
+      Root email for the new account - globally unique across all of AWS,
+      forever, including closed accounts. Plus-addressing is the standard
+      trick: aws+dev@example.com and aws+prod@example.com are distinct to AWS
+      and one inbox to you. This property cannot be changed later without
+      replacing the account.
+    AllowedPattern: "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
+    ConstraintDescription: A valid email address.
+
+  ParentOuId:
+    Type: String
+    Description: >-
+      Organizational unit to place the account in (ou-xxxx-xxxxxxxx), or a
+      root ID (r-xxxx). Leave empty for the organization root. Placement
+      decides which SCPs apply, so "empty" means "no guardrails beyond the
+      root's".
+    Default: ""
+    AllowedPattern: "^$|^(ou-[a-z0-9]{4,32}-[a-z0-9]{8,32}|r-[a-z0-9]{4,32})$"
+
+  AccessRoleName:
+    Type: String
+    Description: >-
+      Name of the admin role Organizations pre-creates in the new account,
+      assumable from the management account. Keep the default unless your org
+      standardised on another name; every tool that says "assume
+      OrganizationAccountAccessRole" assumes the default.
+    Default: OrganizationAccountAccessRole
+    AllowedPattern: "^[A-Za-z0-9+=,.@_-]{1,64}$"
+
+Conditions:
+  HasParentOu: !Not [!Equals [!Ref ParentOuId, ""]]
+
+Resources:
+  Account:
+    Type: AWS::Organizations::Account
+    # An account is the outermost container of state there is. Deleting the
+    # resource with Retain leaves the account alive in the org; actually
+    # closing it is `aws organizations close-account`, deliberately manual.
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AccountName: !Sub "${NamePrefix}-${AccountSuffix}"
+      Email: !Ref Email
+      RoleName: !Ref AccessRoleName
+      ParentIds:
+        - !If [HasParentOu, !Ref ParentOuId, !Ref "AWS::NoValue"]
+
+Outputs:
+  AccountId:
+    Description: >-
+      The new 12-digit account ID - what an environments/<env>/ config, a
+      trust policy, or a bucket policy needs.
+    Value: !GetAtt Account.AccountId
+
+  AccountArn:
+    Description: Account ARN, for organizations:* IAM policy resource patterns.
+    Value: !GetAtt Account.Arn
+
+  AccessRoleArn:
+    Description: >-
+      ARN of the pre-created admin role in the new account. Bootstrap the
+      account by assuming this from the management account; it is also what a
+      foundation/iam-role TrustedPrincipalArns wants.
+    Value: !Sub "arn:${AWS::Partition}:iam::${Account.AccountId}:role/${AccessRoleName}"

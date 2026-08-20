@@ -1,0 +1,6 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-org" },
+  { "ParameterKey": "AccountSuffix", "ParameterValue": "dev" },
+  { "ParameterKey": "Email", "ParameterValue": "aws+dev@example.com" },
+  { "ParameterKey": "ParentOuId", "ParameterValue": "ou-ab12-cdef3456" }
+]

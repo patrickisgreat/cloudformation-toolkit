@@ -1,0 +1,7 @@
+[
+  { "ParameterKey": "NamePrefix", "ParameterValue": "example-org" },
+  { "ParameterKey": "CreateAdminGroup", "ParameterValue": "true" },
+  { "ParameterKey": "CreatePowerUserGroup", "ParameterValue": "true" },
+  { "ParameterKey": "CreateReadOnlyGroup", "ParameterValue": "true" },
+  { "ParameterKey": "EnforceMfa", "ParameterValue": "true" }
+]

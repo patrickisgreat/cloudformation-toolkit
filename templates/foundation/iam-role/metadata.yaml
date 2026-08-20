@@ -1,0 +1,3 @@
+group: foundation
+status: stable
+summary: General-purpose IAM role - service or cross-account trust, MFA/ExternalId, boundary, raw policy escape hatch
