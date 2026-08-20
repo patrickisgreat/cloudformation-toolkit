@@ -11,9 +11,9 @@ Legend: ✅ done · 🟡 partial · ⬜ not started
 
 ---
 
-## Where this is (2026-08-15)
+## Where this is (2026-08-20)
 
-27 templates and 1 stack on `main`. `cfn-lint` clean, 1,360 offline tests
+32 templates and 1 stack on `main`. `cfn-lint` clean, 1,630 offline tests
 passing, docs and catalog generated and checked in CI.
 
 | Area | State |
@@ -21,6 +21,7 @@ passing, docs and catalog generated and checked in CI.
 | Toolchain (`bin/cfn`, generated docs, generated catalog) | ✅ |
 | Test harness (conventions, security policy, per-template) | ✅ |
 | Foundation — VPC, KMS, secrets, CI identity, Cognito | ✅ |
+| IAM & accounts — roles, groups, users, account vending, Access Analyzer | 🟡 no OU/SCP modelling |
 | Containers — ECR, cluster, ALB, Fargate service | ✅ |
 | Serverless — Lambda, HTTP API, AppSync | 🟡 no Step Functions or EventBridge |
 | Messaging — SQS, SNS | 🟡 no EventBridge bus/rule |

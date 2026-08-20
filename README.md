@@ -49,9 +49,14 @@ together; none define resources inline.
 
 | Template | Status | Description |
 |----------|--------|-------------|
+| [`foundation/access-analyzer`](templates/foundation/access-analyzer) | stable | IAM Access Analyzer - free external-access findings, opt-in paid unused-access findings |
 | [`foundation/cognito-user-pool`](templates/foundation/cognito-user-pool) | **beta** | Cognito user pool with hardened defaults, a public SPA app client, and an optional hosted UI domain |
 | [`foundation/github-oidc-role`](templates/foundation/github-oidc-role) | stable | GitHub Actions OIDC deploy role scoped to one repo and ref, no long-lived keys |
+| [`foundation/iam-groups`](templates/foundation/iam-groups) | stable | Admin/poweruser/readonly IAM group tiers plus a custom group, MFA-enforced by default |
+| [`foundation/iam-role`](templates/foundation/iam-role) | stable | General-purpose IAM role - service or cross-account trust, MFA/ExternalId, boundary, raw policy escape hatch |
+| [`foundation/iam-user`](templates/foundation/iam-user) | stable | One IAM user per stack - groups, opt-in console password and access key, both born in Secrets Manager |
 | [`foundation/kms-key`](templates/foundation/kms-key) | stable | Customer-managed KMS key with rotation, alias, and a composed key policy |
+| [`foundation/org-account`](templates/foundation/org-account) | **beta** | Member account vending via Organizations - OU placement, standard access role, retained on delete |
 | [`foundation/secret`](templates/foundation/secret) | stable | Secrets Manager secret, generated at create time, with optional CMK and replication |
 | [`foundation/vpc`](templates/foundation/vpc) | stable | Multi-AZ VPC with public/private subnets, chosen NAT posture, endpoints, flow logs |
 
