@@ -1,0 +1,56 @@
+name: claude-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  # A review of a superseded push tells you nothing. Cancel it.
+  group: claude-review-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Claude Code review
+    # Drafts get reviewed when they are marked ready, not on every push.
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      id-token: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Review the pull request
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }}.
+
+            This repo is a library of reusable CloudFormation templates; its
+            rules live in CLAUDE.md and docs/CONVENTIONS.md. Beyond ordinary
+            correctness review, check the non-negotiables:
+
+            - Default parameter values must produce the secure configuration,
+              and anything with a recurring cost must default to off.
+            - No secrets through parameters — Secrets Manager ARNs only.
+            - Stateful resources carry Retain (or Snapshot) deletion policies.
+            - Stacks under stacks/ contain no inline resources.
+            - Generated README tables and the catalog are never hand-edited.
+            - Each template's examples/basic/ parameter set would actually
+              deploy, and new behavior comes with a test that can fail.
+
+            Post your findings as inline comments on the relevant lines, and
+            finish with one short summary comment. If the PR is clean, say so
+            briefly — do not invent nitpicks.
+          claude_args: |
+            --allowed-tools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
