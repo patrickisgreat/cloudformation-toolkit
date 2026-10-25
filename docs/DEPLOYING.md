@@ -12,6 +12,19 @@ Then edit `environments/dev/env.json`: set `region`, `profile` if you use one,
 and `artifacts_bucket` (required for anything under `stacks/`, which uses nested
 templates).
 
+## Consuming the toolkit from another repository
+
+An application repository keeps its own `environments/` directory, so account
+ids, profiles and parameter sets never enter this library. Point the CLI at it:
+
+```bash
+export CFN_ENV_DIR=/path/to/your-app/infra/aws/environments
+./bin/cfn deploy foundation/vpc --env your-app-dev
+```
+
+Every `--env` then resolves under that directory. Templates and stacks still
+come from this checkout, so one toolkit serves many applications.
+
 ## The loop
 
 ```bash
