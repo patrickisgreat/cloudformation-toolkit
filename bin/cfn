@@ -29,6 +29,9 @@ else
 fi
 
 DEFAULT_ENV="${CFN_ENV:-dev}"
+# Where environments live. A consumer repo keeps its own environments directory
+# and points here at it, so account-specific config never enters this library.
+ENV_ROOT="${CFN_ENV_DIR:-environments}"
 
 # --- output helpers ---------------------------------------------------------
 
@@ -87,8 +90,8 @@ target_slug() {
 
 env_file() {
   local env="$1"
-  local f="environments/$env/env.json"
-  [[ -f "$f" ]] || die "no environment config at $f. Copy environments/dev and edit it."
+  local f="$ENV_ROOT/$env/env.json"
+  [[ -f "$f" ]] || die "no environment config at $f. Copy environments/dev and edit it, or set CFN_ENV_DIR."
   printf '%s\n' "$f"
 }
 
@@ -147,7 +150,7 @@ aws_flags() {
 
 param_file() {
   local env="$1" slug="$2"
-  local f="environments/$env/params/$slug.json"
+  local f="$ENV_ROOT/$env/params/$slug.json"
   [[ -f "$f" ]] && printf '%s\n' "$f"
 }
 
@@ -167,7 +170,7 @@ package_template() {
   local env="$1" tmpl="$2" out="$3" bucket prefix
   bucket="$(env_get "$env" artifacts_bucket)"
   [[ -n "$bucket" ]] || die "$tmpl uses nested stacks, so it must be packaged, but \
-\"artifacts_bucket\" is unset in environments/$env/env.json."
+\"artifacts_bucket\" is unset in $ENV_ROOT/$env/env.json."
   prefix="$(env_get "$env" artifacts_prefix cloudformation-toolkit)"
 
   info "packaging $tmpl -> s3://$bucket/$prefix"
@@ -206,6 +209,7 @@ ${BOLD}Online${RESET} (needs credentials; reads environments/<env>/env.json)
 
 ${BOLD}Flags${RESET}
   --env <name>     Environment under environments/ (default: ${DEFAULT_ENV}; or set CFN_ENV)
+  CFN_ENV_DIR      Directory holding environments (default: environments/), for a consumer repo
   --param K=V      Override one parameter; repeatable, wins over the env's param file
   --yes            Skip the confirmation prompt on destructive commands
 
@@ -363,7 +367,7 @@ cmd_deploy() {
   elif [[ ${#overrides[@]} -gt 0 ]]; then
     read_params < <("$PY" scripts/merge_params.py --none "${overrides[@]}")
   else
-    warn "no parameter file at environments/$env/params/$slug.json and no --param flags; using template defaults"
+    warn "no parameter file at $ENV_ROOT/$env/params/$slug.json and no --param flags; using template defaults"
   fi
 
   info "deploying $BOLD$stack$RESET from $deploy_tmpl"
