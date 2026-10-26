@@ -121,6 +121,7 @@ together; none define resources inline.
 
 | Template | Status | Description |
 |----------|--------|-------------|
+| [`observability/budget-alarms`](templates/observability/budget-alarms) | **beta** | Monthly cost budget with actual and forecast email thresholds, plus free Cost Anomaly Detection |
 | [`observability/service-alarms`](templates/observability/service-alarms) | stable | Alarm set for a container service - 5xx, target health, p99 latency, CPU, DLQ |
 <!-- END_CATALOG -->
 

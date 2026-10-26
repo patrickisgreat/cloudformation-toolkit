@@ -1,0 +1,5 @@
+# Catalog metadata — consumed by scripts/gen_catalog.py to build the tables in
+# the root README.md.
+group: observability
+status: beta
+summary: Monthly cost budget with actual and forecast email thresholds, plus free Cost Anomaly Detection

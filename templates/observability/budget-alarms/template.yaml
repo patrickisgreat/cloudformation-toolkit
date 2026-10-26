@@ -1,0 +1,214 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >-
+  Account cost guard rails: a monthly cost budget that emails at two actual-spend
+  thresholds and one forecast threshold, plus free Cost Anomaly Detection on
+  service spend. The first stack to deploy in any new account.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Naming
+        Parameters:
+          - NamePrefix
+          - Environment
+      - Label:
+          default: Monthly budget
+        Parameters:
+          - MonthlyBudgetUsd
+          - ActualThresholdPercent1
+          - ActualThresholdPercent2
+          - ForecastThresholdPercent
+      - Label:
+          default: Who is told
+        Parameters:
+          - AlertEmail
+          - AlarmTopicArn
+      - Label:
+          default: Anomaly detection
+        Parameters:
+          - EnableAnomalyDetection
+          - AnomalyThresholdUsd
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Description: >-
+      Prefix for the budget and monitor names. Must be unique per account, since
+      budget names collide across stacks.
+    AllowedPattern: "^[a-z][a-z0-9-]{1,30}[a-z0-9]$"
+    ConstraintDescription: >-
+      3-32 characters, lowercase letters, digits and hyphens, starting with a
+      letter and ending with a letter or digit.
+
+  Environment:
+    Type: String
+    Description: Environment this budget guards. Used in names only; the budget itself is account-wide.
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+
+  MonthlyBudgetUsd:
+    Type: Number
+    Description: >-
+      The month's expected bill in USD. Not a cap - AWS Budgets only notifies -
+      but the number every threshold below is a percentage of. Set it to what
+      you intend to spend, not what you fear; a budget set high enough never to
+      fire is a budget that never fires.
+    Default: 100
+    MinValue: 1
+
+  ActualThresholdPercent1:
+    Type: Number
+    Description: >-
+      First actual-spend notification, as a percentage of the budget. Fires once
+      per month when month-to-date spend crosses it.
+    Default: 50
+    MinValue: 1
+    MaxValue: 1000
+
+  ActualThresholdPercent2:
+    Type: Number
+    Description: Second actual-spend notification, as a percentage of the budget.
+    Default: 80
+    MinValue: 1
+    MaxValue: 1000
+
+  ForecastThresholdPercent:
+    Type: Number
+    Description: >-
+      Forecast notification, as a percentage of the budget. AWS projects the
+      month's total from spend so far; this fires when the projection crosses
+      the line, usually days before the actual thresholds do. Forecasts need
+      about five weeks of history, so in a new account this one is quiet at first.
+    Default: 100
+    MinValue: 1
+    MaxValue: 1000
+
+  AlertEmail:
+    Type: String
+    Description: >-
+      Address that receives every notification. Budgets emails directly - no
+      confirmation link, unlike an SNS email subscription - so this works from
+      the moment the stack completes.
+    AllowedPattern: "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+    ConstraintDescription: An email address.
+
+  AlarmTopicArn:
+    Type: String
+    Description: >-
+      SNS topic ARN to notify as well, for paging or chat integrations. The
+      topic's own policy must allow budgets.amazonaws.com to publish (see the
+      README); without that statement the stack still creates and the topic
+      silently receives nothing. Leave empty for email only.
+    Default: ""
+
+  EnableAnomalyDetection:
+    Type: String
+    Description: >-
+      Create a Cost Anomaly Detection monitor over per-service spend with a
+      daily email digest. The service is free. An account may hold only ONE
+      service-dimension monitor, so set this to false in every stack after the
+      first in the same account.
+    Default: "true"
+    AllowedValues: ["true", "false"]
+
+  AnomalyThresholdUsd:
+    Type: Number
+    Description: >-
+      Smallest anomaly, in USD of total impact, worth an email. Below a few
+      dollars the digest is noise from normal day-to-day variance.
+    Default: 20
+    MinValue: 1
+
+Conditions:
+  HasAlarmTopic: !Not [!Equals [!Ref AlarmTopicArn, ""]]
+  ShouldDetectAnomalies: !Equals [!Ref EnableAnomalyDetection, "true"]
+
+Resources:
+  MonthlyBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: !Sub "${NamePrefix}-${Environment}-monthly"
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount: !Ref MonthlyBudgetUsd
+          Unit: USD
+      # Three fixed notification slots rather than a loop: CloudFormation has no
+      # loops without a server-side transform, and three reviewable entries are
+      # the whole point of the template.
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: !Ref ActualThresholdPercent1
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref AlertEmail
+            - !If
+              - HasAlarmTopic
+              - SubscriptionType: SNS
+                Address: !Ref AlarmTopicArn
+              - !Ref AWS::NoValue
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: !Ref ActualThresholdPercent2
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref AlertEmail
+            - !If
+              - HasAlarmTopic
+              - SubscriptionType: SNS
+                Address: !Ref AlarmTopicArn
+              - !Ref AWS::NoValue
+        - Notification:
+            NotificationType: FORECASTED
+            ComparisonOperator: GREATER_THAN
+            Threshold: !Ref ForecastThresholdPercent
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref AlertEmail
+            - !If
+              - HasAlarmTopic
+              - SubscriptionType: SNS
+                Address: !Ref AlarmTopicArn
+              - !Ref AWS::NoValue
+
+  AnomalyMonitor:
+    Type: AWS::CE::AnomalyMonitor
+    Condition: ShouldDetectAnomalies
+    Properties:
+      MonitorName: !Sub "${NamePrefix}-${Environment}-services"
+      MonitorType: DIMENSIONAL
+      MonitorDimension: SERVICE
+
+  AnomalySubscription:
+    Type: AWS::CE::AnomalySubscription
+    Condition: ShouldDetectAnomalies
+    Properties:
+      SubscriptionName: !Sub "${NamePrefix}-${Environment}-anomalies"
+      MonitorArnList:
+        - !Ref AnomalyMonitor
+      # DAILY is the only frequency that delivers by email; IMMEDIATE needs SNS.
+      Frequency: DAILY
+      ThresholdExpression: !Sub >-
+        {"Dimensions":{"Key":"ANOMALY_TOTAL_IMPACT_ABSOLUTE","MatchOptions":["GREATER_THAN_OR_EQUAL"],"Values":["${AnomalyThresholdUsd}"]}}
+      Subscribers:
+        - Type: EMAIL
+          Address: !Ref AlertEmail
+
+Outputs:
+  BudgetName:
+    Description: Name of the monthly budget, for the Budgets console and CLI.
+    Value: !Ref MonthlyBudget
+
+  AnomalyMonitorArn:
+    Description: ARN of the anomaly monitor, when created.
+    Condition: ShouldDetectAnomalies
+    Value: !Ref AnomalyMonitor
